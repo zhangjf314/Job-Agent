@@ -140,7 +140,7 @@ export async function deleteCareerProfile(id: string, db: DbClient = prisma) {
 export async function getOrCreateDemoUser(db: DbClient = prisma) {
   return db.user.upsert({
     where: { email: "demo.student@example.com" },
-    update: {},
+    update: { name: "演示应届生" },
     create: {
       name: "演示应届生",
       email: "demo.student@example.com",
