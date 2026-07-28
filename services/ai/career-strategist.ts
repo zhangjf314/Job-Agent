@@ -3,6 +3,7 @@ import type { ResumeProfile } from "@/services/resume-generator";
 import type { JDAnalysis, Resume } from "@prisma/client";
 import { buildCareerStrategyResult } from "@/services/strategy-engine";
 import { LLMClient } from "./llm-client";
+import { careerStrategyOutputContract } from "./output-contracts";
 
 export interface CareerStrategistProvider {
   generate(input: {
@@ -38,6 +39,7 @@ export class LLMCareerStrategistProvider implements CareerStrategistProvider {
       const result = await this.client.structuredCompletion({
         schemaName: "career_strategy_generation_result",
         schema: careerStrategyGenerationResultSchema,
+        outputContract: careerStrategyOutputContract,
         messages: [
           {
             role: "system",

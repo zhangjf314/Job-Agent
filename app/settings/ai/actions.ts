@@ -33,7 +33,10 @@ async function runMinimalTest(): Promise<AITestResult> {
     const result = await createLLMClient(config).structuredCompletion({
       schemaName: "ai_settings_test",
       schema: testSchema,
-      maxOutputTokens: 64,
+      outputContract: "Object with exactly ok:true and message:non-empty string.",
+      // Reasoning-capable compatible models may consume part of this budget before
+      // producing the small final JSON response.
+      maxOutputTokens: 256,
       messages: [
         { role: "system", content: "Return a minimal JSON health-check result." },
         { role: "user", content: 'Return {"ok":true,"message":"connection healthy"}.' },

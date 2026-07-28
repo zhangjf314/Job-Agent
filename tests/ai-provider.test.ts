@@ -36,12 +36,20 @@ function completion(content: string, init?: {
   status?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   headers?: Record<string, string>;
+  reasoningContent?: string;
 }) {
   return new Response(
     JSON.stringify({
       id: "provider-id",
       model: "test-model",
-      choices: [{ message: { content } }],
+      choices: [{
+        message: {
+          content,
+          ...(init?.reasoningContent === undefined
+            ? {}
+            : { reasoning_content: init.reasoningContent }),
+        },
+      }],
       usage: init?.usage,
     }),
     { status: init?.status ?? 200, headers: init?.headers },
@@ -236,6 +244,26 @@ describe("OpenAI-compatible HTTP client", () => {
 });
 
 describe("structured output", () => {
+  it("uses only final content and records reasoning-field presence without storing reasoning text", async () => {
+    const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
+    const observer: LLMCallObserver = { async record(record) { records.push(record); } };
+    const fetcher = vi.fn(async () => completion('{"ok":true}', {
+      reasoningContent: "PRIVATE REASONING MUST NOT BE STORED",
+    })) as typeof fetch;
+    const result = await client(fetcher, {}, observer).structuredCompletion(input());
+
+    expect(result.data).toEqual({ ok: true, message: "ok" });
+    expect(result.metadata.reasoningFieldPresent).toBe(true);
+    expect(records[0].metadata).toMatchObject({ reasoningFieldPresent: true });
+    expect(JSON.stringify(records)).not.toContain("PRIVATE REASONING MUST NOT BE STORED");
+  });
+
+  it("reports reasoning-field absence without inventing it", async () => {
+    const fetcher = vi.fn(async () => completion('{"ok":true}')) as typeof fetch;
+    const result = await client(fetcher).structuredCompletion(input());
+    expect(result.metadata.reasoningFieldPresent).toBe(false);
+  });
+
   it("accepts an outer Markdown JSON fence", async () => {
     const fetcher = vi.fn(async () => completion('```json\n{"ok":true}\n```')) as typeof fetch;
     await expect(client(fetcher).structuredCompletion(input())).resolves.toMatchObject({ data: { ok: true } });
@@ -256,6 +284,21 @@ describe("structured output", () => {
     const result = await client(fetcher).structuredCompletion(input());
     expect(result.metadata.repairCount).toBe(1);
     expect(result.metadata.externalRequestCount).toBe(2);
+  });
+
+  it("includes the explicit output contract in initial and repair requests", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(completion("{}"))
+      .mockResolvedValueOnce(completion('{"ok":true}')) as typeof fetch;
+    await client(fetcher).structuredCompletion({
+      ...input(),
+      outputContract: "Object with exactly ok:true.",
+    });
+
+    const initialBody = JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body));
+    const repairBody = JSON.parse(String(vi.mocked(fetcher).mock.calls[1][1]?.body));
+    expect(initialBody.messages.at(-1).content).toContain("Object with exactly ok:true.");
+    expect(repairBody.messages[0].content).toContain("Object with exactly ok:true.");
   });
 
   it("repairs a schema mismatch exactly once", async () => {
