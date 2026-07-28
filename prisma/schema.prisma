@@ -1,0 +1,999 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TargetStatus {
+  seeking_internship
+  seeking_fulltime
+  open_to_opportunities
+}
+
+enum SkillCategory {
+  programming_language
+  framework
+  database
+  tool
+  business
+  soft_skill
+}
+
+enum SkillLevel {
+  beginner
+  intermediate
+  advanced
+  expert
+}
+
+enum EmploymentType {
+  internship
+  fulltime
+  parttime
+  campus
+}
+
+enum EvidenceType {
+  file
+  url
+  text
+  image
+}
+
+enum ResumeType {
+  general
+  role_specific
+  jd_tailored
+}
+
+enum ResumeStatus {
+  draft
+  active
+  archived
+}
+
+enum ResumeSectionType {
+  basic_info
+  summary
+  education
+  skills
+  projects
+  experiences
+  certificates
+  awards
+  others
+}
+
+enum ResumeLanguage {
+  zh_CN
+}
+
+enum SeniorityLevel {
+  intern
+  new_grad
+  junior
+  mid
+  senior
+  unknown
+}
+
+enum TargetTimeframe {
+  immediate
+  one_month
+  three_months
+  six_months
+}
+
+enum RoleFamily {
+  engineering
+  data
+  product
+  operations
+  design
+  sales
+  other
+}
+
+enum StrategyPriority {
+  high
+  medium
+  low
+}
+
+enum SkillGapCategory {
+  hard_skill
+  soft_skill
+  domain_knowledge
+  tool
+  project_experience
+  interview
+}
+
+enum SkillLevelForGap {
+  none
+  beginner
+  intermediate
+  advanced
+}
+
+enum ActionCategory {
+  resume
+  skill
+  project
+  application
+  interview
+  networking
+}
+
+enum ActionStatus {
+  todo
+  in_progress
+  done
+  skipped
+}
+
+enum JobType {
+  fulltime
+  internship
+  parttime
+  campus
+  contract
+  unknown
+}
+
+enum WorkMode {
+  onsite
+  hybrid
+  remote
+  unknown
+}
+
+enum JobSource {
+  mock
+  manual
+  web_search
+  company_career_page
+  official_employment_platform
+  other
+}
+
+enum JobSearchRunStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum JobRecommendation {
+  strong_yes
+  yes
+  maybe
+  no
+}
+
+enum SavedJobStatus {
+  saved
+  applied
+  interviewing
+  offer
+  rejected
+  ignored
+}
+
+enum CompanyType {
+  internet
+  software_outsourcing
+  state_owned
+  foreign_company
+  manufacturing_digital
+  startup
+  unknown
+}
+
+enum ApplicationSource {
+  boss
+  liepin
+  company_site
+  school_career_center
+  referral
+  email
+  manual
+  other
+}
+
+enum ApplicationChannel {
+  online_platform
+  company_website
+  referral
+  email
+  campus_event
+  wechat
+  other
+}
+
+enum ApplicationStatus {
+  planned
+  applied
+  resume_screen
+  written_test
+  interviewing
+  offer
+  rejected
+  withdrawn
+  no_response
+  review
+  archived
+}
+
+enum InterviewRoundType {
+  phone
+  video
+  onsite
+  written_test
+  technical
+  hr
+  manager
+  group
+  other
+}
+
+enum InterviewRoundStatus {
+  scheduled
+  completed
+  cancelled
+  no_show
+  passed
+  failed
+  unknown
+}
+
+enum InterviewResult {
+  passed
+  failed
+  pending
+  unknown
+}
+
+enum ApplicationTaskCategory {
+  follow_up
+  resume_update
+  interview_prep
+  written_test_prep
+  networking
+  document
+  other
+}
+
+enum OfferStatus {
+  pending
+  accepted
+  declined
+  expired
+  negotiating
+}
+
+enum EvaluationType {
+  jd_parsing
+  match_scoring
+  resume_suggestion
+}
+
+enum LLMCallStatus {
+  success
+  failed
+  fallback
+}
+
+model User {
+  id        String          @id @default(cuid())
+  name      String
+  email     String          @unique
+  profiles  CareerProfile[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model CareerProfile {
+  id                       String                          @id @default(cuid())
+  userId                   String
+  user                     User                            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetStatus             TargetStatus                    @default(open_to_opportunities)
+  targetRoles              String[]
+  targetCities             String[]
+  expectedSalaryMin        Int?
+  expectedSalaryMax        Int?
+  personalSummary          String?
+  profileCompletenessScore Int                             @default(0)
+  basicInfo                BasicInfo?
+  educationItems           EducationItem[]
+  skillItems               SkillItem[]
+  projectItems             ProjectItem[]
+  experienceItems          ExperienceItem[]
+  certificateItems         CertificateItem[]
+  awardItems               AwardItem[]
+  evidenceItems            EvidenceItem[]
+  resumes                  Resume[]
+  jobDescriptions          JobDescription[]
+  jdAnalyses               JDAnalysis[]
+  strategyPlans            CareerStrategyPlan[]
+  directionRecommendations CareerDirectionRecommendation[]
+  skillGaps                SkillGap[]
+  jobSearchStrategies      JobSearchStrategy[]
+  actionPlanItems          ActionPlanItem[]
+  jobSearchRuns            JobSearchRun[]
+  jobMatches               JobMatch[]
+  savedJobs                SavedJob[]
+  applications             Application[]
+  interviewFeedback        InterviewFeedback[]
+  applicationTasks         ApplicationTask[]
+  offerRecords             OfferRecord[]
+  evaluations              EvaluationRecord[]
+  llmCallLogs              LLMCallLog[]
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
+
+  @@index([userId])
+}
+
+model BasicInfo {
+  id              String        @id @default(cuid())
+  profileId       String        @unique
+  profile         CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  realName        String
+  phone           String
+  email           String
+  location        String?
+  githubUrl       String?
+  portfolioUrl    String?
+  linkedinUrl     String?
+  personalWebsite String?
+}
+
+model EducationItem {
+  id        String        @id @default(cuid())
+  profileId String
+  profile   CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  school    String
+  major     String
+  degree    String
+  startDate DateTime
+  endDate   DateTime?
+  gpa       String?
+  ranking   String?
+  courses   String[]
+  honors    String[]
+
+  @@index([profileId])
+}
+
+model SkillItem {
+  id                String        @id @default(cuid())
+  profileId         String
+  profile           CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name              String
+  category          SkillCategory
+  level             SkillLevel
+  evidence          String?
+  yearsOfExperience Float?
+
+  @@index([profileId])
+}
+
+model ProjectItem {
+  id               String        @id @default(cuid())
+  profileId        String
+  profile          CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name             String
+  role             String?
+  startDate        DateTime?
+  endDate          DateTime?
+  background       String?
+  goal             String?
+  responsibilities String[]
+  techStack        String[]
+  highlights       String[]
+  results          String?
+  metrics          String[]
+  links            String[]
+
+  @@index([profileId])
+}
+
+model ExperienceItem {
+  id               String         @id @default(cuid())
+  profileId        String
+  profile          CareerProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company          String
+  department       String?
+  role             String
+  employmentType   EmploymentType
+  startDate        DateTime
+  endDate          DateTime?
+  responsibilities String[]
+  achievements     String[]
+  techStack        String[]
+  businessImpact   String?
+  metrics          String[]
+
+  @@index([profileId])
+}
+
+model CertificateItem {
+  id            String        @id @default(cuid())
+  profileId     String
+  profile       CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name          String
+  issuer        String
+  issuedAt      DateTime?
+  expiresAt     DateTime?
+  credentialUrl String?
+
+  @@index([profileId])
+}
+
+model AwardItem {
+  id          String        @id @default(cuid())
+  profileId   String
+  profile     CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String
+  issuer      String?
+  level       String?
+  awardedAt   DateTime?
+  description String?
+
+  @@index([profileId])
+}
+
+model EvidenceItem {
+  id                String        @id @default(cuid())
+  profileId         String
+  profile           CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  type              EvidenceType
+  title             String
+  url               String?
+  description       String?
+  relatedEntityType String?
+  relatedEntityId   String?
+
+  @@index([profileId])
+}
+
+model Resume {
+  id                     String           @id @default(cuid())
+  profileId              String
+  profile                CareerProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title                  String
+  targetRole             String?
+  targetCity             String?
+  language               ResumeLanguage   @default(zh_CN)
+  type                   ResumeType       @default(general)
+  status                 ResumeStatus     @default(draft)
+  contentMarkdown        String
+  contentJson            Json?
+  sourceProfileSnapshot  Json?
+  sourceProfileVersion   String?
+  completenessScore      Int?
+  qualityScore           Int?
+  missingFields          String[]
+  improvementQuestions   String[]
+  qualityWarnings        String[]
+  generationNotes        String[]
+  changeLog              String?
+  isDefault              Boolean          @default(false)
+  sections               ResumeSection[]
+  jobDescriptions        JobDescription[]
+  jdAnalyses             JDAnalysis[]
+  baseTailoredResumes    TailoredResume[] @relation("BaseResume")
+  generatedTailoredItems TailoredResume[] @relation("TailoredResumeOutput")
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  @@index([profileId])
+  @@index([profileId, isDefault])
+}
+
+model ResumeSection {
+  id              String            @id @default(cuid())
+  resumeId        String
+  resume          Resume            @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  type            ResumeSectionType
+  title           String
+  contentMarkdown String
+  order           Int
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([resumeId])
+  @@index([resumeId, order])
+}
+
+model JobDescription {
+  id        String        @id @default(cuid())
+  profileId String
+  profile   CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  resumeId  String?
+  resume    Resume?       @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  title     String
+  company   String?
+  city      String?
+  rawText   String
+  sourceUrl String?
+  analyses  JDAnalysis[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([profileId])
+  @@index([resumeId])
+}
+
+model JDAnalysis {
+  id                       String           @id @default(cuid())
+  jobDescriptionId         String
+  jobDescription           JobDescription   @relation(fields: [jobDescriptionId], references: [id], onDelete: Cascade)
+  profileId                String
+  profile                  CareerProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  resumeId                 String?
+  resume                   Resume?          @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  targetRole               String
+  seniorityLevel           SeniorityLevel   @default(unknown)
+  internshipDuration       String?
+  conversionOpportunity    String           @default("unknown")
+  candidateProfile         String[]
+  coreResponsibilities     String[]
+  hardSkills               String[]
+  softSkills               String[]
+  experienceRequirements   String[]
+  educationRequirements    String[]
+  bonusPoints              String[]
+  keywords                 String[]
+  matchScore               Int
+  hardSkillScore           Int
+  projectMatchScore        Int
+  experienceMatchScore     Int
+  educationMatchScore      Int
+  keywordCoverageScore     Int
+  matchedPoints            String[]
+  gaps                     String[]
+  riskWarnings             String[]
+  resumeRewriteSuggestions String[]
+  tailoredResumes          TailoredResume[]
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  @@index([jobDescriptionId])
+  @@index([profileId])
+  @@index([resumeId])
+}
+
+model TailoredResume {
+  id                 String     @id @default(cuid())
+  jdAnalysisId       String
+  jdAnalysis         JDAnalysis @relation(fields: [jdAnalysisId], references: [id], onDelete: Cascade)
+  baseResumeId       String
+  baseResume         Resume     @relation("BaseResume", fields: [baseResumeId], references: [id], onDelete: Cascade)
+  tailoredResumeId   String
+  tailoredResume     Resume     @relation("TailoredResumeOutput", fields: [tailoredResumeId], references: [id], onDelete: Cascade)
+  rewriteExplanation String[]
+  changedSections    String[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([jdAnalysisId])
+  @@index([baseResumeId])
+  @@index([tailoredResumeId])
+}
+
+model CareerStrategyPlan {
+  id                          String                          @id @default(cuid())
+  profileId                   String
+  profile                     CareerProfile                   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title                       String
+  summary                     String
+  targetTimeframe             TargetTimeframe                 @default(one_month)
+  overallReadinessScore       Int
+  recommendedPrimaryDirection String
+  recommendedCities           String[]
+  strategyNotes               String[]
+  recommendations             CareerDirectionRecommendation[]
+  skillGaps                   SkillGap[]
+  jobSearchStrategies         JobSearchStrategy[]
+  actionPlan                  ActionPlanItem[]
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+
+  @@index([profileId])
+}
+
+model CareerDirectionRecommendation {
+  id                  String              @id @default(cuid())
+  strategyPlanId      String
+  strategyPlan        CareerStrategyPlan  @relation(fields: [strategyPlanId], references: [id], onDelete: Cascade)
+  profileId           String
+  profile             CareerProfile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  directionName       String
+  roleFamily          RoleFamily
+  matchScore          Int
+  confidence          Int
+  priority            StrategyPriority
+  suitableRoles       String[]
+  suitableIndustries  String[]
+  recommendedCities   String[]
+  matchedEvidence     String[]
+  gaps                String[]
+  risks               String[]
+  resumeFocus         String[]
+  searchKeywords      String[]
+  skillGaps           SkillGap[]
+  jobSearchStrategies JobSearchStrategy[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([strategyPlanId])
+  @@index([profileId])
+}
+
+model SkillGap {
+  id                        String                         @id @default(cuid())
+  strategyPlanId            String
+  strategyPlan              CareerStrategyPlan             @relation(fields: [strategyPlanId], references: [id], onDelete: Cascade)
+  profileId                 String
+  profile                   CareerProfile                  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  directionRecommendationId String?
+  directionRecommendation   CareerDirectionRecommendation? @relation(fields: [directionRecommendationId], references: [id], onDelete: SetNull)
+  skillName                 String
+  category                  SkillGapCategory
+  currentLevel              SkillLevelForGap
+  targetLevel               SkillLevelForGap
+  importance                Int
+  suggestedActions          String[]
+  evidenceNeeded            String[]
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
+
+  @@index([strategyPlanId])
+  @@index([profileId])
+  @@index([directionRecommendationId])
+}
+
+model JobSearchStrategy {
+  id                        String                         @id @default(cuid())
+  strategyPlanId            String
+  strategyPlan              CareerStrategyPlan             @relation(fields: [strategyPlanId], references: [id], onDelete: Cascade)
+  profileId                 String
+  profile                   CareerProfile                  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  directionRecommendationId String?
+  directionRecommendation   CareerDirectionRecommendation? @relation(fields: [directionRecommendationId], references: [id], onDelete: SetNull)
+  targetRole                String
+  targetCities              String[]
+  targetIndustries          String[]
+  companyTypes              String[]
+  searchKeywords            String[]
+  negativeKeywords          String[]
+  weeklyApplicationTarget   Int
+  resumeVersionSuggestion   String
+  applicationAdvice         String[]
+  interviewPrepAdvice       String[]
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
+
+  @@index([strategyPlanId])
+  @@index([profileId])
+  @@index([directionRecommendationId])
+}
+
+model ActionPlanItem {
+  id             String             @id @default(cuid())
+  strategyPlanId String
+  strategyPlan   CareerStrategyPlan @relation(fields: [strategyPlanId], references: [id], onDelete: Cascade)
+  profileId      String
+  profile        CareerProfile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  category       ActionCategory
+  priority       StrategyPriority
+  estimatedHours Int
+  dueInDays      Int
+  status         ActionStatus       @default(todo)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([strategyPlanId])
+  @@index([profileId])
+}
+
+model JobPost {
+  id                    String        @id @default(cuid())
+  title                 String
+  normalizedTitle       String
+  company               String
+  companyNormalizedName String
+  city                  String
+  district              String?
+  province              String?
+  salaryMin             Int?
+  salaryMax             Int?
+  salaryMonths          Int?
+  salaryText            String?
+  experienceRequirement String?
+  educationRequirement  String?
+  internshipDuration    String?
+  conversionOpportunity String        @default("unknown")
+  candidateProfile      String[]
+  jobType               JobType       @default(unknown)
+  workMode              WorkMode      @default(unknown)
+  description           String
+  requirements          String
+  benefits              String[]
+  skills                String[]
+  keywords              String[]
+  industries            String[]
+  companyType           CompanyType   @default(unknown)
+  headcount             Int?
+  source                JobSource
+  sourceUrl             String?
+  sourcePlatform        String?
+  publishedAt           DateTime?
+  collectedAt           DateTime
+  contentHash           String
+  qualityScore          Int
+  riskFlags             String[]
+  rawText               String?
+  rawJson               Json?
+  matches               JobMatch[]
+  savedJobs             SavedJob[]
+  applications          Application[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([city])
+  @@index([normalizedTitle])
+  @@index([contentHash])
+  @@index([sourceUrl])
+}
+
+model JobSearchRun {
+  id                        String             @id @default(cuid())
+  profileId                 String?
+  profile                   CareerProfile?     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  strategyPlanId            String?
+  directionRecommendationId String?
+  query                     String
+  city                      String?
+  filters                   Json?
+  source                    JobSource
+  status                    JobSearchRunStatus @default(pending)
+  totalFound                Int                @default(0)
+  totalSaved                Int                @default(0)
+  notes                     String?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  @@index([profileId])
+  @@index([strategyPlanId])
+  @@index([directionRecommendationId])
+}
+
+model JobMatch {
+  id                         String            @id @default(cuid())
+  profileId                  String
+  profile                    CareerProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  resumeId                   String?
+  strategyPlanId             String?
+  directionRecommendationId  String?
+  jobPostId                  String
+  jobPost                    JobPost           @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  matchScore                 Int
+  hardRequirementScore       Int
+  skillMatchScore            Int
+  projectMatchScore          Int
+  experienceMatchScore       Int
+  educationMatchScore        Int
+  growthValueScore           Int               @default(50)
+  conversionOpportunityScore Int               @default(50)
+  directionMatchScore        Int               @default(50)
+  preferenceMatchScore       Int
+  freshnessScore             Int
+  qualityScore               Int
+  riskPenalty                Int
+  recommendation             JobRecommendation
+  matchedPoints              String[]
+  gaps                       String[]
+  riskWarnings               String[]
+  resumeSuggestions          String[]
+  interviewPrepSuggestions   String[]
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  @@index([profileId])
+  @@index([jobPostId])
+  @@index([matchScore])
+}
+
+model SavedJob {
+  id        String         @id @default(cuid())
+  profileId String
+  profile   CareerProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  jobPostId String
+  jobPost   JobPost        @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  status    SavedJobStatus @default(saved)
+  notes     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([profileId, jobPostId])
+  @@index([profileId])
+  @@index([jobPostId])
+}
+
+model Application {
+  id                String              @id @default(cuid())
+  profileId         String
+  profile           CareerProfile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  jobPostId         String?
+  jobPost           JobPost?            @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  jobMatchId        String?
+  resumeId          String?
+  tailoredResumeId  String?
+  jdAnalysisId      String?
+  company           String
+  jobTitle          String
+  city              String?
+  source            ApplicationSource?
+  sourceUrl         String?
+  channel           ApplicationChannel  @default(other)
+  status            ApplicationStatus   @default(planned)
+  priority          StrategyPriority    @default(medium)
+  appliedAt         DateTime?
+  lastContactAt     DateTime?
+  nextFollowUpAt    DateTime?
+  salaryExpectation String?
+  notes             String?
+  interviewRounds   InterviewRound[]
+  feedback          InterviewFeedback[]
+  tasks             ApplicationTask[]
+  offers            OfferRecord[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([profileId])
+  @@index([jobPostId])
+  @@index([jobMatchId])
+  @@index([status])
+}
+
+model InterviewRound {
+  id            String               @id @default(cuid())
+  applicationId String
+  application   Application          @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  roundName     String
+  roundType     InterviewRoundType   @default(other)
+  status        InterviewRoundStatus @default(unknown)
+  scheduledAt   DateTime?
+  completedAt   DateTime?
+  interviewer   String?
+  location      String?
+  meetingLink   String?
+  notes         String?
+  feedback      InterviewFeedback[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([applicationId])
+}
+
+model InterviewFeedback {
+  id                   String          @id @default(cuid())
+  interviewRoundId     String
+  interviewRound       InterviewRound  @relation(fields: [interviewRoundId], references: [id], onDelete: Cascade)
+  applicationId        String
+  application          Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  profileId            String
+  profile              CareerProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  feedbackText         String
+  selfRating           Int?
+  result               InterviewResult @default(unknown)
+  strengths            String[]
+  weaknesses           String[]
+  questionsAsked       String[]
+  knowledgeGaps        String[]
+  improvementActions   String[]
+  resumeImplications   String[]
+  strategyImplications String[]
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([interviewRoundId])
+  @@index([applicationId])
+  @@index([profileId])
+}
+
+model ApplicationTask {
+  id            String                  @id @default(cuid())
+  applicationId String
+  application   Application             @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  profileId     String
+  profile       CareerProfile           @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  category      ApplicationTaskCategory @default(other)
+  priority      StrategyPriority        @default(medium)
+  status        ActionStatus            @default(todo)
+  dueAt         DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([applicationId])
+  @@index([profileId])
+}
+
+model OfferRecord {
+  id            String        @id @default(cuid())
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  profileId     String
+  profile       CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company       String
+  jobTitle      String
+  city          String?
+  salaryMin     Int?
+  salaryMax     Int?
+  salaryMonths  Int?
+  salaryText    String?
+  benefits      String[]
+  probationInfo String?
+  deadline      DateTime?
+  status        OfferStatus   @default(pending)
+  pros          String[]
+  cons          String[]
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([applicationId])
+  @@index([profileId])
+}
+
+model EvaluationRecord {
+  id             String         @id @default(cuid())
+  profileId      String
+  profile        CareerProfile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  type           EvaluationType
+  entityId       String
+  expectedOutput Json?
+  actualOutput   Json?
+  humanScore     Int?
+  reviewerNotes  String?
+  tags           String[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([profileId])
+  @@index([type])
+  @@index([entityId])
+}
+
+model LLMCallLog {
+  id                  String         @id @default(cuid())
+  profileId           String?
+  profile             CareerProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  operation           String
+  provider            String
+  model               String
+  status              LLMCallStatus
+  durationMs          Int
+  promptTokens        Int?
+  completionTokens    Int?
+  totalTokens         Int?
+  estimatedCostMicros Int?
+  errorCode           String?
+  fallbackUsed        Boolean        @default(false)
+  metadata            Json?
+  createdAt           DateTime       @default(now())
+
+  @@index([profileId])
+  @@index([operation])
+  @@index([createdAt])
+}

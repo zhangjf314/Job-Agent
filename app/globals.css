@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 173 80% 28%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 30% 94%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 30% 96%;
+  --muted-foreground: 215 16% 45%;
+  --destructive: 0 72% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 173 80% 28%;
+  --radius: 0.5rem;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+}
+
+.resume-print {
+  font-family: Arial, "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  line-height: 1.62;
+}
+
+.resume-print h2 {
+  margin: 1.25rem 0 0.6rem;
+  border-bottom: 1px solid #d4d4d4;
+  padding-bottom: 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.resume-print h3 {
+  margin: 1rem 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.resume-print p {
+  margin: 0.4rem 0;
+}
+
+.resume-print ul {
+  margin: 0.35rem 0 0.75rem 1.2rem;
+  list-style: disc;
+}
+
+.resume-print li {
+  margin: 0.22rem 0;
+}
+
+.resume-print code {
+  border-radius: 0.25rem;
+  background: #f5f5f5;
+  padding: 0.05rem 0.25rem;
+  font-family: Consolas, monospace;
+}
