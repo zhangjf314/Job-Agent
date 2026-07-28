@@ -239,3 +239,9 @@ This MVP does not bypass login, CAPTCHA, anti-bot systems, or platform restricti
 模板骨架位于 `template/*.md`，元数据注册表位于 `services/resume-templates/registry.ts`，所有输出统一通过 `services/resume-templates/renderer.ts` 渲染。新增第五个模板时，只需增加模板文件、模板键、注册表定义、对应样式和测试，不需要分别修改预览、下载与打印逻辑。完整占位符规范见 `docs/resume-template-system.md`。
 
 当前 Career Profile 没有照片字段或上传能力，因此带证件照模板在没有照片时自动采用无照片布局，不会生成损坏图片。本功能没有新增环境变量；数据库新增 migration `20260728125000_add_resume_template_key`，为 `Resume.templateKey` 提供 `minimal` 默认值并兼容已有数据。
+
+## CI 质量门禁
+
+Pull Request 和推送到 `main` 都会触发 GitHub Actions CI，也可以通过 `workflow_dispatch` 手动运行。Linux 主门禁使用一次性 PostgreSQL 16 服务，依次执行锁文件依赖安装、Prisma Client 生成、Schema 校验、9 条迁移的部署与状态检查、TypeScript/ESLint/Vitest 工程检查以及生产构建。
+
+独立的 Windows 门禁执行依赖安装、Prisma 生成与校验以及完整的 `npm run check`，用于发现 Windows 路径、Vitest 项目内缓存和跨平台兼容问题；数据库迁移由 Linux 主门禁负责。两个 Job 均固定使用 Mock AI、Fixture 搜索，并关闭真实 Web Search 和公司页面抓取，因此不需要也不会读取真实 API Key。

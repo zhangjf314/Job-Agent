@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Linux quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: personal_job_agent_ci
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres -d personal_job_agent_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/personal_job_agent_ci?schema=public
+      APP_MODE: test
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DEMO_USER_EMAIL: ci@example.com
+      AI_PROVIDER: mock
+      SEARCH_PROVIDER: fixture
+      ENABLE_REAL_WEB_SEARCH: "false"
+      ENABLE_COMPANY_PAGE_FETCH: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Check database migration status
+        run: npx prisma migrate status
+
+      - name: Run engineering checks
+        run: npm run check
+
+      - name: Build production application
+        run: npm run build
+
+  windows-check:
+    name: Windows compatibility gate
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      APP_MODE: test
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DEMO_USER_EMAIL: ci-windows@example.com
+      AI_PROVIDER: mock
+      SEARCH_PROVIDER: fixture
+      ENABLE_REAL_WEB_SEARCH: "false"
+      ENABLE_COMPANY_PAGE_FETCH: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:1/personal_job_agent_ci?schema=public
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:1/personal_job_agent_ci?schema=public
+
+      - name: Run engineering checks
+        run: npm run check
