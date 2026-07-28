@@ -471,6 +471,7 @@ model Resume {
   language               ResumeLanguage   @default(zh_CN)
   type                   ResumeType       @default(general)
   status                 ResumeStatus     @default(draft)
+  templateKey            String           @default("minimal")
   contentMarkdown        String
   contentJson            Json?
   sourceProfileSnapshot  Json?

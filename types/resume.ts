@@ -12,11 +12,14 @@ export const resumeSectionTypes = [
   "others",
 ] as const;
 export const resumeLanguages = ["zh-CN"] as const;
+export const resumeTemplateKeys = ["minimal", "elegant", "dark", "photo"] as const;
+export const defaultResumeTemplateKey = "minimal" as const;
 
 export type ResumeType = (typeof resumeTypes)[number];
 export type ResumeStatus = (typeof resumeStatuses)[number];
 export type ResumeSectionType = (typeof resumeSectionTypes)[number];
 export type ResumeLanguage = (typeof resumeLanguages)[number];
+export type ResumeTemplateKey = (typeof resumeTemplateKeys)[number];
 
 export type GeneratedResumeSection = {
   type: ResumeSectionType;

@@ -77,4 +77,20 @@ describe("resume generator", () => {
     expect(score).toBeGreaterThanOrEqual(0);
     expect(score).toBeLessThanOrEqual(100);
   });
+
+  it("omits empty optional sections instead of emitting empty headings", () => {
+    const generated = generateResumeFromProfile(profile({
+      educationItems: [],
+      projectItems: [],
+      experienceItems: [],
+      certificateItems: [],
+      awardItems: [],
+      evidenceItems: [],
+    }));
+
+    expect(generated.contentMarkdown).not.toContain("## 教育经历");
+    expect(generated.contentMarkdown).not.toContain("## 项目经历");
+    expect(generated.contentMarkdown).not.toContain("## 证书与获奖");
+    expect(generated.contentMarkdown).not.toMatch(/^##\s*$/m);
+  });
 });

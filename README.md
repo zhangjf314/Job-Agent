@@ -231,3 +231,11 @@ This MVP does not bypass login, CAPTCHA, anti-bot systems, or platform restricti
 ## 架构演进说明
 
 当前后端逻辑继续运行在 Next.js 服务层和 Server Actions 中，数据库使用 PostgreSQL + Prisma。FastAPI、Redis 队列、LangGraph、pgvector/Qdrant 和 reranker 尚未引入；这些组件适合在异步批量采集、长流程 Agent 编排和语义检索规模增长后按需拆分，不是当前 MVP 正常运行的前置条件。
+
+## 简历模板系统
+
+简历中心现已支持四种模板：极简、简洁大方、深色和带证件照。新建通用简历时可选择模板；已有简历可在详情页切换并保存，保存后预览、Markdown 下载和浏览器打印/PDF 会统一使用该模板。旧简历以及无效或已废弃的模板键会安全回退到默认的“极简”模板。
+
+模板骨架位于 `template/*.md`，元数据注册表位于 `services/resume-templates/registry.ts`，所有输出统一通过 `services/resume-templates/renderer.ts` 渲染。新增第五个模板时，只需增加模板文件、模板键、注册表定义、对应样式和测试，不需要分别修改预览、下载与打印逻辑。完整占位符规范见 `docs/resume-template-system.md`。
+
+当前 Career Profile 没有照片字段或上传能力，因此带证件照模板在没有照片时自动采用无照片布局，不会生成损坏图片。本功能没有新增环境变量；数据库新增 migration `20260728125000_add_resume_template_key`，为 `Resume.templateKey` 提供 `minimal` 默认值并兼容已有数据。

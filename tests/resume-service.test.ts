@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from "vitest";
 import { createMockGraduateProfile } from "@/services/mock-profile";
-import { duplicateResume, generateGeneralResumeFromProfile, setDefaultResume } from "@/services/resume-service";
+import {
+  duplicateResume,
+  generateGeneralResumeFromProfile,
+  setDefaultResume,
+  updateResumeTemplate,
+} from "@/services/resume-service";
 
 type Row = Record<string, any>;
 
@@ -121,5 +126,23 @@ describe("resume service", () => {
     const defaults = db.resumes.filter((resume: Row) => resume.isDefault);
     expect(defaults).toHaveLength(1);
     expect(defaults[0].id).toBe(second.id);
+  });
+
+  it("persists the selected template and reads it back", async () => {
+    const db = new ResumeMockDb() as any;
+    const resume = await generateGeneralResumeFromProfile("profile_1", "elegant", db);
+
+    expect(resume.templateKey).toBe("elegant");
+    await updateResumeTemplate(resume.id, "dark", db);
+    const reloaded = await db.resume.findUniqueOrThrow({ where: { id: resume.id } });
+    expect(reloaded.templateKey).toBe("dark");
+  });
+
+  it("keeps the template when duplicating a resume", async () => {
+    const db = new ResumeMockDb() as any;
+    const resume = await generateGeneralResumeFromProfile("profile_1", "photo", db);
+    const copied = await duplicateResume(resume.id, db);
+
+    expect(copied.templateKey).toBe("photo");
   });
 });

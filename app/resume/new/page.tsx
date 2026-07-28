@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResumeTemplateSelector } from "@/components/resume-template-selector";
 import { getCareerProfiles, getOrCreateDemoUser } from "@/services/career-profile-service";
 import { generateGeneralResumeFromFormAction } from "../actions";
 
@@ -41,6 +42,7 @@ export default async function NewResumePage() {
                   </option>
                 ))}
               </select>
+              <ResumeTemplateSelector />
               <Button type="submit">生成通用简历</Button>
             </form>
           )}

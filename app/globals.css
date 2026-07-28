@@ -75,3 +75,71 @@ body {
   padding: 0.05rem 0.25rem;
   font-family: Consolas, monospace;
 }
+
+.resume-template[data-resume-template="minimal"] {
+  background: #fff;
+  color: #171717;
+}
+
+.resume-template[data-resume-template="elegant"] {
+  border-top: 6px solid #0f766e;
+  background: #fff;
+  color: #1f2937;
+}
+
+.resume-template[data-resume-template="elegant"] h2,
+.resume-template[data-resume-template="elegant"] h3 {
+  border-color: #99f6e4;
+  color: #115e59;
+}
+
+.resume-template[data-resume-template="dark"] {
+  background: #111827;
+  color: #f9fafb;
+}
+
+.resume-template[data-resume-template="dark"] h2,
+.resume-template[data-resume-template="dark"] h3 {
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+.resume-template[data-resume-template="dark"] code {
+  background: #374151;
+}
+
+.resume-template[data-resume-template="photo"] {
+  border-top: 6px solid #334155;
+  background: #fff;
+  color: #0f172a;
+}
+
+@media print {
+  .resume-print h2,
+  .resume-print h3 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  .resume-print p,
+  .resume-print li {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .resume-template[data-resume-template="dark"] {
+    background: #fff !important;
+    color: #111827 !important;
+  }
+
+  .resume-template[data-resume-template="dark"] h2,
+  .resume-template[data-resume-template="dark"] h3 {
+    border-color: #9ca3af !important;
+    color: #111827 !important;
+  }
+
+  .resume-template[data-resume-template="dark"] code {
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+  }
+}

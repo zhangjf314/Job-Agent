@@ -3,6 +3,7 @@ import {
   resumeLanguages,
   resumeSectionTypes,
   resumeStatuses,
+  resumeTemplateKeys,
   resumeTypes,
 } from "@/types/resume";
 
@@ -12,6 +13,7 @@ export const resumeTypeSchema = z.enum(resumeTypes);
 export const resumeStatusSchema = z.enum(resumeStatuses);
 export const resumeSectionTypeSchema = z.enum(resumeSectionTypes);
 export const resumeLanguageSchema = z.enum(resumeLanguages);
+export const resumeTemplateKeySchema = z.enum(resumeTemplateKeys);
 
 export const resumeSectionSchema = z.object({
   type: resumeSectionTypeSchema,
@@ -42,6 +44,7 @@ export const resumeCreateInputSchema = z.object({
   language: resumeLanguageSchema.default("zh-CN"),
   type: resumeTypeSchema.default("general"),
   status: resumeStatusSchema.default("draft"),
+  templateKey: resumeTemplateKeySchema.default("minimal"),
   contentMarkdown: requiredText("简历内容"),
   contentJson: z.unknown().optional(),
   sourceProfileSnapshot: z.unknown().optional(),

@@ -8,6 +8,7 @@ import {
 import { createResume, resumeInclude } from "./resume-service";
 import { careerProfileInclude } from "./career-profile-service";
 import { createJDAnalyzerProvider, createTailoredResumeWriterProvider } from "./ai/provider-factory";
+import { resolveResumeTemplateKey } from "./resume-templates/registry";
 import { calculateJDMatch, generateResumeRewriteSuggestions } from "./jd-matching";
 
 type DbClient = PrismaClient;
@@ -215,6 +216,7 @@ export async function generateTailoredResume(
       language: "zh-CN",
       type: "jd_tailored",
       status: "draft",
+      templateKey: resolveResumeTemplateKey(baseResume.templateKey),
       contentMarkdown: tailored.contentMarkdown,
       contentJson: { sections: tailored.sections, jdAnalysisId: analysis.id, applicationMaterials: tailored.applicationMaterials },
       sourceProfileSnapshot: snapshot(profile),

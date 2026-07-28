@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
+import { ErrorPanel } from "@/components/error-panel";
 import { Button } from "@/components/ui/button";
 import { PrintButton } from "@/components/print-button";
-import { markdownToHtml } from "@/lib/markdown-to-html";
+import { ResumeDocument } from "@/components/resume-document";
 import { getResumeById } from "@/services/resume-service";
+import { renderResumeMarkdown, type RenderedResumeMarkdown } from "@/services/resume-templates/renderer";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -14,6 +16,13 @@ export default async function ResumePdfPage({ params }: Props) {
   const { id } = await params;
   const resume = await getResumeById(id);
   if (!resume) notFound();
+  let rendered: RenderedResumeMarkdown | null = null;
+  let renderError = "";
+  try {
+    rendered = renderResumeMarkdown(resume);
+  } catch (error) {
+    renderError = error instanceof Error ? error.message : "未知模板渲染错误";
+  }
 
   return (
     <main className="min-h-screen bg-neutral-100 px-4 py-6 text-neutral-900">
@@ -39,10 +48,17 @@ export default async function ResumePdfPage({ params }: Props) {
         </div>
       </div>
 
-      <article
-        className="resume-print mx-auto max-w-[900px] bg-white px-14 py-12 shadow-sm print:max-w-none print:p-0 print:shadow-none"
-        dangerouslySetInnerHTML={{ __html: markdownToHtml(resume.contentMarkdown) }}
-      />
+      {rendered ? (
+        <ResumeDocument
+          markdown={rendered.markdown}
+          templateKey={rendered.template.key}
+          className="mx-auto max-w-[900px] bg-white px-14 py-12 shadow-sm print:max-w-none print:p-0 print:shadow-none"
+        />
+      ) : (
+        <div className="mx-auto max-w-[900px]">
+          <ErrorPanel title="简历模板渲染失败" message="当前简历暂时无法生成打印页面。" details={renderError} />
+        </div>
+      )}
     </main>
   );
 }

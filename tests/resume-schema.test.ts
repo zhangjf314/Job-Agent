@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resumeGenerationResultSchema } from "@/schemas/resume";
+import { resumeCreateInputSchema, resumeGenerationResultSchema } from "@/schemas/resume";
 
 describe("resume schema", () => {
   it("validates a generated resume result", () => {
@@ -36,5 +36,15 @@ describe("resume schema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("defaults old create inputs to the minimal template", () => {
+    const result = resumeCreateInputSchema.parse({
+      profileId: "profile_1",
+      title: "旧简历",
+      contentMarkdown: "## 简历内容\n\n正文",
+    });
+
+    expect(result.templateKey).toBe("minimal");
   });
 });

@@ -9,7 +9,9 @@ import {
   generateGeneralResumeFromProfile,
   setDefaultResume,
   updateResumeContent,
+  updateResumeTemplate,
 } from "@/services/resume-service";
+import { resumeTemplateKeySchema } from "@/schemas/resume";
 
 export async function generateGeneralResumeAction(profileId: string) {
   const resume = await generateGeneralResumeFromProfile(profileId);
@@ -20,9 +22,19 @@ export async function generateGeneralResumeAction(profileId: string) {
 
 export async function generateGeneralResumeFromFormAction(formData: FormData) {
   const profileId = String(formData.get("profileId") ?? "");
-  const resume = await generateGeneralResumeFromProfile(profileId);
+  const templateKey = resumeTemplateKeySchema.parse(formData.get("templateKey"));
+  const resume = await generateGeneralResumeFromProfile(profileId, templateKey);
   revalidatePath("/resume");
   redirect(`/resume/${resume.id}`);
+}
+
+export async function saveResumeTemplateAction(id: string, formData: FormData) {
+  const templateKey = resumeTemplateKeySchema.parse(formData.get("templateKey"));
+  await updateResumeTemplate(id, templateKey);
+  revalidatePath("/resume");
+  revalidatePath(`/resume/${id}`);
+  revalidatePath(`/resume/${id}/download`);
+  revalidatePath(`/resume/${id}/pdf`);
 }
 
 export async function saveResumeContentAction(id: string, formData: FormData) {

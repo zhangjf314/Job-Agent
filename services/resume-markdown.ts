@@ -5,12 +5,16 @@ export function linesToMarkdownList(lines: string[]) {
 }
 
 export function joinSection(title: string, body: string) {
-  return [`## ${title}`, body.trim()].filter(Boolean).join("\n\n");
+  const cleanTitle = title.trim();
+  const cleanBody = body.trim();
+  if (!cleanTitle || !cleanBody) return "";
+  return `## ${cleanTitle}\n\n${cleanBody}`;
 }
 
 export function buildMarkdownFromSections(sections: GeneratedResumeSection[]) {
   return sections
     .sort((left, right) => left.order - right.order)
     .map((section) => joinSection(section.title, section.contentMarkdown))
+    .filter(Boolean)
     .join("\n\n");
 }

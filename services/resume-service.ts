@@ -9,6 +9,8 @@ import {
 import { careerProfileInclude } from "./career-profile-service";
 import { generateResumeFromProfile } from "./resume-generator";
 import { calculateResumeQualityScore } from "./resume-quality";
+import { resolveResumeTemplateKey } from "./resume-templates/registry";
+import type { ResumeTemplateKey } from "@/types/resume";
 
 type DbClient = PrismaClient;
 
@@ -46,6 +48,7 @@ function mapCreate(input: ResumeCreateInput) {
     language: toDbLanguage(input.language),
     type: input.type,
     status: input.status,
+    templateKey: input.templateKey,
     contentMarkdown: input.contentMarkdown,
     contentJson: input.contentJson === undefined ? undefined : snapshot(input.contentJson),
     sourceProfileSnapshot:
@@ -197,6 +200,7 @@ export async function duplicateResume(id: string, db: DbClient = prisma) {
       language: fromDbLanguage(String(resume.language)) as "zh-CN",
       type: resume.type,
       status: "draft",
+      templateKey: resolveResumeTemplateKey(resume.templateKey),
       contentMarkdown: resume.contentMarkdown,
       contentJson: resume.contentJson ?? undefined,
       sourceProfileSnapshot: resume.sourceProfileSnapshot ?? undefined,
@@ -241,7 +245,25 @@ export async function archiveResume(id: string, db: DbClient = prisma) {
   });
 }
 
-export async function generateGeneralResumeFromProfile(profileId: string, db: DbClient = prisma) {
+export async function updateResumeTemplate(
+  id: string,
+  templateKey: ResumeTemplateKey,
+  db: DbClient = prisma,
+) {
+  return db.resume.update({
+    where: { id },
+    data: { templateKey },
+    include: resumeInclude,
+  });
+}
+
+export async function generateGeneralResumeFromProfile(
+  profileId: string,
+  templateKeyOrDb: ResumeTemplateKey | DbClient = "minimal",
+  suppliedDb: DbClient = prisma,
+) {
+  const templateKey = typeof templateKeyOrDb === "string" ? templateKeyOrDb : "minimal";
+  const db = typeof templateKeyOrDb === "string" ? suppliedDb : templateKeyOrDb;
   const profile = await db.careerProfile.findUniqueOrThrow({
     where: { id: profileId },
     include: careerProfileInclude,
@@ -258,6 +280,7 @@ export async function generateGeneralResumeFromProfile(profileId: string, db: Db
       language: generated.language,
       type: "general",
       status: "draft",
+      templateKey,
       contentMarkdown: generated.contentMarkdown,
       contentJson: { sections: generated.sections },
       sourceProfileSnapshot: snapshot(profile),

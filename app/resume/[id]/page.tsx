@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Copy, Download, FileText, Save, Star } from "lucide-react";
+import { ErrorPanel } from "@/components/error-panel";
+import { ResumeDocument } from "@/components/resume-document";
+import { ResumeTemplateSelector } from "@/components/resume-template-selector";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { listApplicationsByResumeId } from "@/services/applications/application-service";
 import { getTailoredResumeByResumeId } from "@/services/jd-service";
 import { getResumeById } from "@/services/resume-service";
+import { renderResumeMarkdown, type RenderedResumeMarkdown } from "@/services/resume-templates/renderer";
 import {
   archiveResumeAction,
   deleteResumeAction,
   duplicateResumeAction,
   saveResumeContentAction,
+  saveResumeTemplateAction,
   setDefaultResumeAction,
 } from "../actions";
 
@@ -36,6 +41,13 @@ export default async function ResumeDetailPage({ params }: Props) {
   const tailored = await getTailoredResumeByResumeId(id);
   const applications = await listApplicationsByResumeId(id);
   const applicationMaterials = getApplicationMaterials(resume.contentJson);
+  let rendered: RenderedResumeMarkdown | null = null;
+  let renderError = "";
+  try {
+    rendered = renderResumeMarkdown(resume);
+  } catch (error) {
+    renderError = error instanceof Error ? error.message : "未知模板渲染错误";
+  }
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-6 py-8">
@@ -77,7 +89,17 @@ export default async function ResumeDetailPage({ params }: Props) {
               <div>状态：<StatusBadge value={resume.status} /></div>
               <div>类型：{resume.type === "jd_tailored" ? "岗位定制" : "通用简历"}</div>
               <div>默认：{resume.isDefault ? "是" : "否"}</div>
+              <div>模板：{rendered?.template.name ?? "渲染失败"}</div>
               <div>更新时间：{resume.updatedAt.toLocaleString("zh-CN")}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>简历模板</CardTitle></CardHeader>
+            <CardContent>
+              <form action={saveResumeTemplateAction.bind(null, resume.id)} className="space-y-4">
+                <ResumeTemplateSelector defaultValue={resume.templateKey} />
+                <Button type="submit" className="w-full">保存模板并刷新预览</Button>
+              </form>
             </CardContent>
           </Card>
           <Card>
@@ -128,7 +150,15 @@ export default async function ResumeDetailPage({ params }: Props) {
           <Card>
             <CardHeader><CardTitle>简历预览</CardTitle></CardHeader>
             <CardContent>
-              <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap rounded-md bg-muted p-4 text-sm leading-6">{resume.contentMarkdown}</pre>
+              {rendered ? (
+                <ResumeDocument
+                  markdown={rendered.markdown}
+                  templateKey={rendered.template.key}
+                  className="max-h-[900px] overflow-auto rounded-md border p-8 text-sm"
+                />
+              ) : (
+                <ErrorPanel title="简历模板渲染失败" message="正文仍可编辑，请检查模板配置后重试。" details={renderError} />
+              )}
             </CardContent>
           </Card>
         </div>
