@@ -1,247 +1,191 @@
 # Personal Job Agent
 
-中国大陆个人求职助手 MVP。已整合 Career Profile、简历中心、JD 分析、职业策略、岗位匹配、合规搜索接入、投递工作台、面试反馈、任务和 Offer 闭环。
+基于 Next.js、Prisma 和 PostgreSQL 构建的个人求职工作流平台，覆盖职业档案、简历生成、JD 分析、岗位管理、投递跟踪和质量观测。
+
+当前版本是面向单用户 Demo 的 MVP：AI 默认使用确定性的 Mock Provider，岗位搜索默认使用 Fixture Provider。项目已经预留 OpenAI-compatible AI 接口以及 Tavily/Bing 搜索接口，但默认配置不会调用真实外部服务，也不需要 API Key。
+
+## 功能概览
+
+- 职业档案：教育、技能、项目、经历、证书、奖项和求职偏好
+- 简历中心：通用简历、JD 定制简历、Markdown 下载与浏览器打印
+- 简历模板：极简、简洁大方、深色、带证件照四种模板
+- JD 分析：职责、硬技能、软技能、关键词、匹配项、差距和风险
+- 职业策略：方向建议、技能差距、求职策略和行动计划
+- 岗位管理：手动文本、公开 URL、CSV/Excel 和 Fixture 搜索结果导入
+- 岗位质量：归一化、去重、风险识别、匹配评分和推荐解释
+- 投递工作台：投递漏斗、任务、面试轮次、反馈和 Offer 对比
+- 质量观测：人工评分以及 AI 调用耗时、Token 和失败记录
+- 数据管理：Demo 数据初始化、统计、JSON 导出和删除
+
+## 技术栈
+
+| 类别 | 技术 |
+| --- | --- |
+| Web | Next.js 15、React 19、TypeScript |
+| UI | Tailwind CSS、Radix UI、Lucide |
+| 数据 | PostgreSQL 16、Prisma 6 |
+| 校验与表单 | Zod、React Hook Form |
+| 测试 | Vitest、Testing Library、jsdom |
+| 工程化 | ESLint、GitHub Actions、Docker Compose |
+| 可扩展接口 | OpenAI-compatible Provider、Tavily/Bing Search Provider |
+
+上述 Provider 接口不代表真实服务已经启用；默认运行模式仍是 Mock AI 与 Fixture 搜索。
+
+## 架构
+
+```mermaid
+flowchart TD
+    UI["Next.js UI / Server Actions"]
+    Services["Application Services"]
+    Providers["AI Provider / Search Provider"]
+    Prisma["Prisma ORM"]
+    DB[("PostgreSQL")]
+
+    UI --> Services
+    Services --> Providers
+    Services --> Prisma
+    Prisma --> DB
+```
+
+简历模板引擎将模板选择与各输出入口统一起来：
+
+```mermaid
+flowchart LR
+    Data["Resume Data"] --> Registry["Template Registry"]
+    Registry --> Renderer["Markdown Renderer"]
+    Renderer --> Preview["Preview"]
+    Renderer --> Download["Markdown Download"]
+    Renderer --> Print["Print / PDF"]
+```
+
+模板骨架位于 `template/*.md`，元数据注册表位于 `services/resume-templates/registry.ts`，统一渲染入口位于 `services/resume-templates/renderer.ts`。占位符与扩展规范见 `docs/resume-template-system.md`。
+
+## 页面展示
+
+仓库暂未提交界面截图，避免误将本机路径、浏览器信息或真实求职数据带入公共历史。后续截图将仅使用仓库自带的虚构 Demo 数据，并放入 `docs/images/`。
 
 ## 本地运行
 
-`npm run dev` 现在只启动 Next.js，不再自动启动 Docker。数据库需要单独准备，这样 Docker Hub 暂时不可用时，应用启动脚本不会被 Docker 镜像拉取问题卡死。
+### 前置条件
+
+- Node.js 24.16.0（当前本地与 CI 验证版本）
+- npm
+- Docker Desktop + Docker Compose，或可访问的 PostgreSQL 16
 
 ### 方案 A：Docker PostgreSQL
 
-```bash
-copy .env.example .env
-npm install
-npm run db
-npm run db:status
-npm run setup
+```powershell
+git clone https://github.com/zhangjf314/Job-Agent.git
+cd Job-Agent
+npm ci
+Copy-Item .env.example .env
+npm run db:docker
+npm run db:wait
+npm run prisma:generate
+npx prisma migrate deploy
+npm run seed
 npm run dev
 ```
 
 访问 `http://localhost:3000`。
 
-如果 `npm run db` 报错类似：
+macOS/Linux 可将复制环境文件的命令替换为：
 
-```text
-failed to resolve reference "docker.io/library/postgres:16-alpine"
-failed to authorize: failed to fetch anonymous token
-Get "https://auth.docker.io/token?...": EOF
+```bash
+cp .env.example .env
 ```
 
-这通常是 Docker Hub 网络、代理、登录态或镜像源问题，不是 Next.js 代码错误，也不是 Prisma schema 错误。
-
-排查建议：
-
-- 重试 `npm run db`
-- 确认 Docker Desktop 正常运行
-- 执行 `docker pull postgres:16-alpine` 单独测试镜像拉取
-- 执行 `docker login` 后重试
-- 配置 Docker 镜像加速、代理或公司网络白名单
-- 改用方案 B：本机 PostgreSQL
-- 改用方案 C：云 PostgreSQL
+`.env.example` 只包含本地演示配置。请勿提交包含真实数据库连接串或 API Key 的 `.env`。
 
 ### 方案 B：本机 PostgreSQL
 
-1. 确认本机已安装并启动 PostgreSQL。
-2. 创建数据库 `personal_job_agent`。
-3. 修改 `.env` 中的 `DATABASE_URL`，例如：
+复制 `.env.example` 后，将 `DATABASE_URL` 改为自己的开发数据库连接串，然后执行：
 
-```bash
-DATABASE_URL="postgresql://your_user:your_password@localhost:5432/personal_job_agent?schema=public"
-```
-
-4. 运行：
-
-```bash
-npm install
-npm run setup
+```powershell
+npm ci
+npm run prisma:generate
+npx prisma migrate deploy
+npm run seed
 npm run dev
 ```
+
+`npm run seed` 会重建 `DEMO_USER_EMAIL` 对应的虚构 Demo 用户，默认是 `demo@example.com`。不要把真实求职数据用于公共演示。
 
 ### 方案 C：云 PostgreSQL
 
-1. 准备云数据库连接串。
-2. 修改 `.env`：
+复制 `.env.example` 后，将 `DATABASE_URL` 改为云 PostgreSQL 提供的连接串。不要把连接串提交到 Git；确认网络和 TLS 参数符合服务商要求后，执行：
 
-```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DB?schema=public"
-```
-
-3. 运行：
-
-```bash
-npm install
-npm run setup
+```powershell
+npm ci
+npm run prisma:generate
+npx prisma migrate deploy
+npm run seed
 npm run dev
 ```
 
-不要提交真实 `.env`。
+### 常见数据库问题
 
-## 诊断命令
+如果 Prisma 报告 `P1001`，表示 `DATABASE_URL` 指向的 PostgreSQL 当前不可访问。请检查服务是否启动、主机和端口是否正确，以及数据库和用户是否已经创建。
 
-```bash
-npm run doctor
-```
-
-Doctor 会检查：
-
-- Node.js / npm 版本
-- `.env` 是否存在
-- `DATABASE_URL` 是否配置
-- Docker / Docker Compose 是否可用
-- 数据库端口是否可连接
-- Prisma Client 是否可生成
+如果 Docker 拉取 `postgres:16-alpine` 时出现 `failed to fetch anonymous token`，问题通常来自 Docker Hub 网络、代理、镜像源或登录状态，并不表示 Prisma Schema 或应用代码损坏。可在修复 Docker 网络后重试，或改用方案 B/C。
 
 ## 常用命令
 
 ```bash
-npm run dev          # 只启动 Next.js
-npm run dev:app      # 同上，显式别名
-npm run db           # 启动 Docker PostgreSQL
-npm run db:down      # 关闭 Docker PostgreSQL
-npm run db:logs      # 查看 PostgreSQL 容器日志
-npm run db:status    # 查看 PostgreSQL 容器状态
-npm run db:wait      # 等待 DATABASE_URL 对应数据库可连接
-npm run setup        # generate -> 检查 DB -> migrate -> seed
-npm run setup:db     # 只执行 migrate + seed
-npm run setup:docker # Docker 模式：db -> wait -> migrate + seed
-npm run check        # typecheck + lint + test
+npm run dev              # 启动 Next.js 开发服务器
+npm run build            # 生产构建
+npm run check            # TypeScript + ESLint + Vitest
+npm run doctor           # 检查本地运行前置条件
+npm run db:docker        # 启动 Docker PostgreSQL
+npm run db:down          # 关闭 Docker 服务
+npm run db:status        # 查看 PostgreSQL 容器状态
+npm run prisma:generate  # 生成 Prisma Client
+npm run seed             # 重建虚构 Demo 数据
 ```
 
-## 常见错误
+## 质量门禁
 
-### Prisma P1001
+当前本地基线：
 
-`P1001: Can't reach database server at localhost:5432`
+- TypeScript：通过
+- ESLint：通过
+- Vitest：37 个测试文件、115 项测试通过
+- Prisma Schema：校验通过
+- PostgreSQL：9 条 Migration 可在空数据库完整部署
+- Next.js Production Build：通过
 
-含义：应用或 Prisma CLI 找不到 PostgreSQL。常见原因：
+`.github/workflows/ci.yml` 为 Pull Request 和推送到 `main` 提供两套门禁：
 
-- PostgreSQL 没启动
-- Docker 镜像拉取失败，容器没有创建成功
-- `.env` 中 `DATABASE_URL` 用户名、密码、主机或端口错误
-- 端口 5432 被占用或未映射
+- Ubuntu：PostgreSQL 16、Prisma generate/validate/migrate、完整工程检查和生产构建
+- Windows：Prisma generate/validate 与完整工程检查，用于发现路径和跨平台问题
 
-处理：
+两个 Job 都固定使用 Mock AI、Fixture 搜索，并关闭真实 Web Search 和公司页面抓取。
 
-```bash
-npm run doctor
-npm run db:status
-npm run db
-npm run setup
-```
+## 当前边界
 
-如果 Docker 仍无法拉取镜像，使用本机 PostgreSQL 或云 PostgreSQL，并更新 `.env`。
-
-### Docker Hub anonymous token / EOF
-
-这是 Docker 拉取镜像时访问 Docker Hub 鉴权接口失败。它不代表项目代码坏了。可以重试、登录 Docker、配置代理/镜像源，或直接使用本机/云 PostgreSQL。
-
-## Demo 数据
-
-`npm run seed` 会重建 `DEMO_USER_EMAIL` 对应的 demo 用户，默认 `demo@example.com`。Seed 覆盖 Profile、Resume、JD/JDAnalysis、Strategy、JobPost、JobMatch、SavedJob、Application、InterviewFeedback 和 OfferRecord。
-
-## Dashboard 与导航
-
-首页跳转 `/dashboard`。统一导航包含 Dashboard、Profile、Resume、JD、Strategy、Jobs、Applications、Settings。Dashboard 展示模块统计、求职漏斗、最近行动、推荐下一步和快捷入口。
+- 默认只使用 Mock AI，不代表真实 LLM 已完成联调
+- 默认只使用 Fixture 搜索，不代表 Tavily 或 Bing 已启用
+- 不登录招聘平台，不绕过 CAPTCHA 或反爬机制
+- 不执行自动投递、不发送邮件、不代替用户操作外部平台
+- 当前是单用户 Demo 模式，尚无生产级认证与多用户隔离
+- 尚未提供正式生产部署
+- 带证件照模板可以无照片安全渲染，但当前没有照片上传功能
 
 ## 数据与隐私
 
-访问 `/settings/data` 可以查看当前用户数据统计、导出 JSON、删除 Demo 用户数据。
+简历、投递记录、面试反馈和 Offer 都属于个人敏感信息。本项目仓库只包含虚构 Demo/Fixture 数据；本地或未来部署时应使用访问控制保护真实数据，并确保 `.env`、数据库备份、日志和导出文件不进入 Git。
 
-本地开发默认数据保存在本地 PostgreSQL。简历、面试反馈、投递记录和 Offer 属于个人敏感信息，部署时应做好访问控制和授权。
+## 路线图
 
-系统不会自动投递简历、不会登录招聘平台、不会发送邮件、不会操作外部招聘平台、不会在未配置真实搜索时访问外网，也不会接入真实 LLM。
-## Real LLM and Job Search MVP
+- OpenAI-compatible 真实 LLM Provider 联调、结构化输出与失败降级
+- Tavily/Bing 真实 Web Search 配置与合规边界验证
+- 多用户认证与数据隔离
+- 可观测性、成本统计和最小真实 Smoke Test
+- 生产部署与备份恢复方案
+- 实时模板预览与可选照片上传
 
-The app still works without any external API keys. By default it uses deterministic mock/rule providers for AI and fixture/mock providers for job search.
+路线图中的能力尚未完成，不应视为当前功能。
 
-### AI provider configuration
+## License
 
-Set these values in `.env` when you want to use an OpenAI-compatible LLM endpoint:
-
-```env
-AI_PROVIDER="llm_provider"
-LLM_API_KEY="your-local-secret"
-LLM_MODEL="your-model-name"
-LLM_BASE_URL="https://api.openai.com/v1"
-```
-
-If `AI_PROVIDER=mock` or `LLM_API_KEY` is empty, the app automatically falls back to mock providers. The key is never shown in the UI or test output. You can check the active mode at:
-
-```bash
-npm run dev
-# then open /settings/ai
-```
-
-Current LLM-capable provider layer:
-
-- JD analysis provider
-- JD-tailored resume writer provider
-- career strategy provider
-- resume bullet writer provider
-
-JD analysis and career strategy services now route through the provider factory, so they can use the real provider when configured and fallback safely when the provider fails or returns invalid structured output.
-
-### Job search provider configuration
-
-The job search MVP supports multiple source types without depending on a single recruitment platform:
-
-- Mock job source
-- Manual JD text
-- Manual public job URL
-- Company career page URL or pasted page text
-- Web Search Provider
-
-Optional search settings:
-
-```env
-SEARCH_PROVIDER="mock"
-SEARCH_API_KEY=""
-SEARCH_BASE_URL=""
-JOB_SEARCH_DEFAULT_LIMIT=20
-JOB_FETCH_TIMEOUT_MS=15000
-ENABLE_REAL_WEB_SEARCH="false"
-ENABLE_COMPANY_PAGE_FETCH="false"
-```
-
-When `SEARCH_API_KEY` is empty or real search is disabled, web search uses fixture/mock results. To import a real job manually, use:
-
-```bash
-npm run dev
-# open /jobs/import
-```
-
-Paste a JD text, a public job URL, or public company career page text. The app structures the job into `JobPost`, deduplicates it, detects risk flags, calculates a profile match, and can then create a `JobDescription` for JD analysis and tailored resume generation.
-
-This MVP does not bypass login, CAPTCHA, anti-bot systems, or platform restrictions. It only supports user-provided text/URLs, public pages when enabled, and configurable search providers.
-
-## 实习求职核心闭环
-
-当前 MVP 已覆盖以下主流程：
-
-1. 在“职业档案”维护教育、技能、项目、实习、目标城市和岗位偏好。
-2. 在“岗位库 > 导入岗位”手动粘贴岗位描述、导入公开链接，或批量上传 CSV / Excel 文件。
-3. 系统结构化提取岗位、公司、城市、技能、学历、实习周期、转正机会、职责、要求、加分项和候选人画像。
-4. 系统结合职业档案计算技能、项目、经历、学历、城市、成长价值、转正机会和方向匹配，并给出风险提示和投递建议。
-5. 从岗位生成岗位描述分析和定制简历；定制结果附带自我介绍、投递邮件和招聘沟通话术。
-6. 在“投递工作台”管理待投递、已投递、筛选、笔试、面试、录用、拒绝和复盘状态。
-7. 在“质量评估”对岗位描述解析、匹配评分和简历建议进行 1–5 分人工标注，并查看大模型调用耗时与 Token 汇总。
-
-批量岗位文件支持 `.csv` 和 `.xlsx`，首行应为列名。推荐列名为：`岗位名称`、`公司`、`城市`、`薪资`、`岗位职责`、`任职要求`、`来源链接`。单次最多导入 200 条，导入后会复用现有归一化、去重、风险识别和人岗匹配流程。
-
-## 架构演进说明
-
-当前后端逻辑继续运行在 Next.js 服务层和 Server Actions 中，数据库使用 PostgreSQL + Prisma。FastAPI、Redis 队列、LangGraph、pgvector/Qdrant 和 reranker 尚未引入；这些组件适合在异步批量采集、长流程 Agent 编排和语义检索规模增长后按需拆分，不是当前 MVP 正常运行的前置条件。
-
-## 简历模板系统
-
-简历中心现已支持四种模板：极简、简洁大方、深色和带证件照。新建通用简历时可选择模板；已有简历可在详情页切换并保存，保存后预览、Markdown 下载和浏览器打印/PDF 会统一使用该模板。旧简历以及无效或已废弃的模板键会安全回退到默认的“极简”模板。
-
-模板骨架位于 `template/*.md`，元数据注册表位于 `services/resume-templates/registry.ts`，所有输出统一通过 `services/resume-templates/renderer.ts` 渲染。新增第五个模板时，只需增加模板文件、模板键、注册表定义、对应样式和测试，不需要分别修改预览、下载与打印逻辑。完整占位符规范见 `docs/resume-template-system.md`。
-
-当前 Career Profile 没有照片字段或上传能力，因此带证件照模板在没有照片时自动采用无照片布局，不会生成损坏图片。本功能没有新增环境变量；数据库新增 migration `20260728125000_add_resume_template_key`，为 `Resume.templateKey` 提供 `minimal` 默认值并兼容已有数据。
-
-## CI 质量门禁
-
-Pull Request 和推送到 `main` 都会触发 GitHub Actions CI，也可以通过 `workflow_dispatch` 手动运行。Linux 主门禁使用一次性 PostgreSQL 16 服务，依次执行锁文件依赖安装、Prisma Client 生成、Schema 校验、9 条迁移的部署与状态检查、TypeScript/ESLint/Vitest 工程检查以及生产构建。
-
-独立的 Windows 门禁执行依赖安装、Prisma 生成与校验以及完整的 `npm run check`，用于发现 Windows 路径、Vitest 项目内缓存和跨平台兼容问题；数据库迁移由 Linux 主门禁负责。两个 Job 均固定使用 Mock AI、Fixture 搜索，并关闭真实 Web Search 和公司页面抓取，因此不需要也不会读取真实 API Key。
+当前仓库暂未附加开源许可证。在确认全部源码和四份简历模板的再许可权之前，不声明可自由复制、修改或再分发。
