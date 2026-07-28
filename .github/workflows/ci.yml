@@ -37,7 +37,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/personal_job_agent_ci?schema=public
       APP_MODE: test
       NEXT_PUBLIC_APP_URL: http://localhost:3000
-      DEMO_USER_EMAIL: ci@example.com
+      DEMO_USER_EMAIL: demo@example.com
       AI_PROVIDER: mock
       SEARCH_PROVIDER: fixture
       ENABLE_REAL_WEB_SEARCH: "false"
@@ -81,7 +81,7 @@ jobs:
     env:
       APP_MODE: test
       NEXT_PUBLIC_APP_URL: http://localhost:3000
-      DEMO_USER_EMAIL: ci-windows@example.com
+      DEMO_USER_EMAIL: demo@example.com
       AI_PROVIDER: mock
       SEARCH_PROVIDER: fixture
       ENABLE_REAL_WEB_SEARCH: "false"
