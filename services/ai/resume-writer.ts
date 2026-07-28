@@ -25,6 +25,7 @@ export class LLMResumeWriterProvider implements ResumeWriter {
   constructor(
     private readonly client = new LLMClient(),
     private readonly fallback = new MockResumeWriter(),
+    private readonly fallbackEnabled = false,
   ) {}
 
   writeBullets(input: ResumeWriterInput): string[] {
@@ -47,7 +48,9 @@ export class LLMResumeWriterProvider implements ResumeWriter {
       });
       const bullets = result.data.bullets ?? [];
       return bullets.length ? bullets : this.fallback.writeBullets(input);
-    } catch {
+    } catch (error) {
+      if (!this.fallbackEnabled) throw error;
+      await this.client.recordFallback("resume_bullets", error);
       return this.fallback.writeBullets(input);
     }
   }

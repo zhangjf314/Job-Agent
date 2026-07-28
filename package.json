@@ -26,6 +26,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "doctor": "node scripts/doctor.js",
+    "smoke:llm": "tsx scripts/llm-smoke.ts",
     "seed": "node prisma/seed.js",
     "setup": "node scripts/setup-local-postgres.js",
     "setup:db": "npm run prisma:migrate && npm run seed",
@@ -54,13 +55,14 @@
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.1.3",
     "jsdom": "^25.0.1",
     "postcss": "^8.4.49",
-    "autoprefixer": "^10.4.20",
     "prisma": "^6.1.0",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

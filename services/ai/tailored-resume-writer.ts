@@ -25,6 +25,7 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
   constructor(
     private readonly client = new LLMClient(),
     private readonly fallback = new MockTailoredResumeWriterProvider(),
+    private readonly fallbackEnabled = false,
   ) {}
 
   async write(input: TailoredResumeWriterInput): Promise<TailoredResumeResult> {
@@ -36,13 +37,23 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           {
             role: "system",
             content:
-              "Create a Chinese JD-tailored resume and application materials from supplied Career Profile, base resume, and JD analysis. Include a factual self-introduction, application email, and recruiter message. Use only supplied facts. Missing skills stay in gaps/warnings, not resume body.",
+              "Create a Chinese JD-tailored resume and application materials. Candidate facts and JD requirements are separate inputs. Only reorganize, compress, and emphasize supplied candidate facts. Never invent employers, projects, internships, education, skills, credentials, metrics, or achievements. Never present a JD requirement as a candidate capability. Put unsupported or missing requirements in gaps, questions, or warnings.",
           },
-          { role: "user", content: JSON.stringify(input) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              candidateFacts: input.profile,
+              baseResumeFacts: input.baseResumeMarkdown,
+              jdRequirements: input.jdAnalysis,
+              requestedOutput: "tailored resume plus application materials and explicit warnings",
+            }),
+          },
         ],
       });
-      return tailoredResumeResultSchema.parse(result.data) as TailoredResumeResult;
-    } catch {
+      return tailoredResumeResultSchema.parse(result.data);
+    } catch (error) {
+      if (!this.fallbackEnabled) throw error;
+      await this.client.recordFallback("tailored_resume_result", error);
       const mock = await this.fallback.write(input);
       return {
         ...mock,

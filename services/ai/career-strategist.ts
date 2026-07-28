@@ -26,6 +26,7 @@ export class LLMCareerStrategistProvider implements CareerStrategistProvider {
   constructor(
     private readonly client = new LLMClient(),
     private readonly fallback = new MockCareerStrategistProvider(),
+    private readonly fallbackEnabled = false,
   ) {}
 
   async generate(input: {
@@ -41,13 +42,25 @@ export class LLMCareerStrategistProvider implements CareerStrategistProvider {
           {
             role: "system",
             content:
-              "Generate career direction and job-search strategy for a China mainland job seeker. Base recommendations on supplied facts. Put missing capabilities into gaps or learning actions.",
+              "Generate career direction and job-search strategy for a China mainland job seeker. Candidate facts and market evidence are separate inputs. Use only supplied candidate facts as existing capabilities. Never invent employers, projects, internships, education, skills, credentials, metrics, or achievements. Treat unmet requirements conservatively as gaps, risks, or learning actions, and label recommendations as recommendations.",
           },
-          { role: "user", content: JSON.stringify(input) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              candidateFacts: input.profile,
+              marketEvidence: {
+                resumeQualityScores: input.resumes,
+                analyzedRoles: input.jdAnalyses,
+              },
+              requestedOutput: "recommendations, gaps, priorities, actions, risks, and assumptions",
+            }),
+          },
         ],
       });
-      return careerStrategyGenerationResultSchema.parse(result.data) as CareerStrategyGenerationResult;
-    } catch {
+      return careerStrategyGenerationResultSchema.parse(result.data);
+    } catch (error) {
+      if (!this.fallbackEnabled) throw error;
+      await this.client.recordFallback("career_strategy_generation_result", error);
       const mock = await this.fallback.generate(input);
       return {
         ...mock,

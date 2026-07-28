@@ -1,4 +1,4 @@
-import { getAIConfig, isLLMConfigured, type AIConfig } from "@/lib/ai-config";
+import { getAIConfig, validateAIConfig, type AIConfig } from "@/lib/ai-config";
 import { LLMClient } from "./llm-client";
 import { LLMResumeWriterProvider, MockResumeWriter } from "./resume-writer";
 import { LLMJDAnalyzerProvider, MockJDAnalyzerProvider } from "./jd-analyzer";
@@ -7,29 +7,44 @@ import { LLMCareerStrategistProvider, MockCareerStrategistProvider } from "./car
 import { createDatabaseLLMCallObserver } from "./llm-observability";
 
 export function getEffectiveAIProvider(config: AIConfig = getAIConfig()) {
-  return isLLMConfigured(config) ? "llm_provider" : "mock";
+  if (config.provider === "mock") return "mock";
+  validateAIConfig(config);
+  return "llm_provider";
 }
 
 export function createLLMClient(config: AIConfig = getAIConfig()) {
+  validateAIConfig(config);
   return new LLMClient(config, fetch, createDatabaseLLMCallObserver());
 }
 
 export function createResumeWriterProvider(config: AIConfig = getAIConfig()) {
-  return isLLMConfigured(config) ? new LLMResumeWriterProvider(createLLMClient(config)) : new MockResumeWriter();
+  return getEffectiveAIProvider(config) === "llm_provider"
+    ? new LLMResumeWriterProvider(createLLMClient(config), new MockResumeWriter(), config.fallbackToMock)
+    : new MockResumeWriter();
 }
 
 export function createJDAnalyzerProvider(config: AIConfig = getAIConfig()) {
-  return isLLMConfigured(config) ? new LLMJDAnalyzerProvider(createLLMClient(config)) : new MockJDAnalyzerProvider();
+  return getEffectiveAIProvider(config) === "llm_provider"
+    ? new LLMJDAnalyzerProvider(createLLMClient(config), new MockJDAnalyzerProvider(), config.fallbackToMock)
+    : new MockJDAnalyzerProvider();
 }
 
 export function createTailoredResumeWriterProvider(config: AIConfig = getAIConfig()) {
-  return isLLMConfigured(config)
-    ? new LLMTailoredResumeWriterProvider(createLLMClient(config))
+  return getEffectiveAIProvider(config) === "llm_provider"
+    ? new LLMTailoredResumeWriterProvider(
+        createLLMClient(config),
+        new MockTailoredResumeWriterProvider(),
+        config.fallbackToMock,
+      )
     : new MockTailoredResumeWriterProvider();
 }
 
 export function createCareerStrategistProvider(config: AIConfig = getAIConfig()) {
-  return isLLMConfigured(config)
-    ? new LLMCareerStrategistProvider(createLLMClient(config))
+  return getEffectiveAIProvider(config) === "llm_provider"
+    ? new LLMCareerStrategistProvider(
+        createLLMClient(config),
+        new MockCareerStrategistProvider(),
+        config.fallbackToMock,
+      )
     : new MockCareerStrategistProvider();
 }
