@@ -1,5 +1,7 @@
 # Personal Job Agent
 
+[![CI](https://github.com/zhangjf314/Job-Agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhangjf314/Job-Agent/actions/workflows/ci.yml)
+
 基于 Next.js、Prisma 和 PostgreSQL 构建的个人求职工作流平台，覆盖职业档案、简历生成、JD 分析、岗位管理、投递跟踪和质量观测。
 
 当前版本是面向单用户 Demo 的 MVP：AI 默认使用确定性的 Mock Provider，岗位搜索默认使用 Fixture Provider。项目已经预留 OpenAI-compatible AI 接口以及 Tavily/Bing 搜索接口，但默认配置不会调用真实外部服务，也不需要 API Key。
