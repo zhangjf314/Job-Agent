@@ -4,6 +4,11 @@ import { getAIConfig, publicAIConfig, validateAIConfig } from "../lib/ai-config"
 import { jdAnalysisResultSchema, tailoredResumeResultSchema } from "../schemas/jd";
 import { careerStrategyGenerationResultSchema } from "../schemas/strategy";
 import { LLMClient, LLMClientError, type LLMCompletionMetadata } from "../services/ai/llm-client";
+import {
+  careerStrategyOutputContract,
+  jdAnalysisOutputContract,
+  tailoredResumeOutputContract,
+} from "../services/ai/output-contracts";
 
 async function main() {
   loadEnvConfig(process.cwd());
@@ -77,12 +82,14 @@ async function main() {
     schemaName: string,
     schema: z.ZodType<T>,
     messages: Array<{ role: "system" | "user"; content: string }>,
+    outputContract?: string,
   ) {
     try {
       const result = await client.structuredCompletion({
         schemaName,
         schema,
         maxOutputTokens: Math.min(config.maxOutputTokens, 1600),
+        outputContract,
         messages,
       });
       summaries.push({
@@ -112,6 +119,7 @@ async function main() {
         { role: "system", content: "Return a minimal JSON health check." },
         { role: "user", content: 'Return {"ok":true}.' },
       ],
+      "Object with exactly ok:true.",
     );
     const jd = await run(
       "JD analysis",
@@ -124,6 +132,7 @@ async function main() {
         },
         { role: "user", content: JSON.stringify(demoFacts.job) },
       ],
+      jdAnalysisOutputContract,
     );
     await run(
       "Tailored resume",
@@ -144,6 +153,7 @@ async function main() {
           }),
         },
       ],
+      tailoredResumeOutputContract,
     );
     await run(
       "Career strategy",
@@ -157,6 +167,7 @@ async function main() {
         },
         { role: "user", content: JSON.stringify(demoFacts) },
       ],
+      careerStrategyOutputContract,
     );
   } catch {
     // Per-step safe summaries below show the first failure. Stop to preserve request budget.

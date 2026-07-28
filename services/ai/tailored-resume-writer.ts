@@ -4,6 +4,7 @@ import type { ResumeProfile } from "@/services/resume-generator";
 import { tailoredResumeResultSchema } from "@/schemas/jd";
 import { generateTailoredResumeContent } from "@/services/tailored-resume-generator";
 import { LLMClient } from "./llm-client";
+import { tailoredResumeOutputContract } from "./output-contracts";
 
 export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
@@ -33,6 +34,7 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       const result = await this.client.structuredCompletion({
         schemaName: "tailored_resume_result",
         schema: tailoredResumeResultSchema,
+        outputContract: tailoredResumeOutputContract,
         messages: [
           {
             role: "system",

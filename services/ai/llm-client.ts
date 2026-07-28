@@ -45,6 +45,7 @@ export type StructuredCompletionInput<T> = {
   jsonSchema?: unknown;
   temperature?: number;
   maxOutputTokens?: number;
+  outputContract?: string;
 };
 
 type Usage = {
@@ -54,7 +55,7 @@ type Usage = {
 };
 
 type CompletionResponse = {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ message?: { content?: string; reasoning_content?: unknown } }>;
   usage?: Usage;
   model?: string;
   id?: string;
@@ -67,6 +68,7 @@ export type LLMCompletionMetadata = {
   retryCount: number;
   repairCount: number;
   externalRequestCount: number;
+  reasoningFieldPresent: boolean;
   estimatedCostMicros?: number;
   priceCurrency?: string;
 };
@@ -78,6 +80,7 @@ type RequestResult = {
   model?: string;
   retryCount: number;
   httpStatus: number;
+  reasoningFieldPresent: boolean;
 };
 
 type ClientRuntime = {
@@ -172,6 +175,7 @@ export class LLMClient {
     let externalRequestCount = 0;
     let providerRequestId: string | undefined;
     let httpStatus: number | undefined;
+    let reasoningFieldPresent = false;
 
     try {
       const initial = await this.requestWithRetries(input.messages, input);
@@ -180,6 +184,7 @@ export class LLMClient {
       usage = addUsage(usage, initial.usage);
       providerRequestId = initial.requestId;
       httpStatus = initial.httpStatus;
+      reasoningFieldPresent ||= initial.reasoningFieldPresent;
 
       let parsed = this.validateContent(initial.content, input.schema);
       if (!parsed.success) {
@@ -188,7 +193,10 @@ export class LLMClient {
           [
             {
               role: "system",
-              content: `Repair the JSON so it matches schema "${input.schemaName}". Return only the corrected JSON value.`,
+              content: [
+                `Repair the JSON so it matches schema "${input.schemaName}". Return only the corrected JSON value.`,
+                input.outputContract ? `Required output contract: ${input.outputContract}` : "",
+              ].filter(Boolean).join("\n"),
             },
             {
               role: "user",
@@ -202,6 +210,7 @@ export class LLMClient {
         usage = addUsage(usage, repair.usage);
         providerRequestId = repair.requestId ?? providerRequestId;
         httpStatus = repair.httpStatus;
+        reasoningFieldPresent ||= repair.reasoningFieldPresent;
         parsed = this.validateContent(repair.content, input.schema);
       }
 
@@ -224,6 +233,7 @@ export class LLMClient {
         retryCount,
         repairCount,
         externalRequestCount,
+        reasoningFieldPresent,
         estimatedCostMicros,
         priceCurrency: estimatedCostMicros === undefined ? undefined : this.config.priceCurrency,
       };
@@ -246,6 +256,7 @@ export class LLMClient {
           retryCount,
           repairCount,
           externalRequestCount,
+          reasoningFieldPresent,
           httpStatus,
           priceCurrency: metadata.priceCurrency,
           providerRequested: "llm_provider",
@@ -280,6 +291,7 @@ export class LLMClient {
           retryCount,
           repairCount,
           externalRequestCount,
+          reasoningFieldPresent,
           httpStatus: normalized.httpStatus ?? httpStatus,
           priceCurrency: this.estimateCost(usage) === undefined ? undefined : this.config.priceCurrency,
           providerRequested: "llm_provider",
@@ -372,7 +384,10 @@ export class LLMClient {
             ...messages,
             {
               role: "user",
-              content: `Return only one JSON value matching schema "${input.schemaName}". Do not include commentary.`,
+              content: [
+                `Return only one JSON value matching schema "${input.schemaName}". Do not include commentary.`,
+                input.outputContract ? `Required output contract: ${input.outputContract}` : "",
+              ].filter(Boolean).join("\n"),
             },
           ],
           ...(this.config.jsonMode
@@ -421,6 +436,10 @@ export class LLMClient {
         requestId: requestId ?? json.id,
         model: json.model,
         httpStatus: response.status,
+        reasoningFieldPresent: Object.prototype.hasOwnProperty.call(
+          json.choices?.[0]?.message ?? {},
+          "reasoning_content",
+        ),
       };
     } catch (error) {
       if (error instanceof LLMClientError) throw error;

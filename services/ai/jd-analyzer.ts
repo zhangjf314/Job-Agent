@@ -2,6 +2,7 @@ import type { JDAnalysisResult } from "@/types/jd";
 import { analyzeJDText } from "@/services/jd-analyzer";
 import { jdAnalysisResultSchema } from "@/schemas/jd";
 import { LLMClient } from "./llm-client";
+import { jdAnalysisOutputContract } from "./output-contracts";
 
 export interface JDAnalyzerProvider {
   analyze(rawText: string): Promise<JDAnalysisResult>;
@@ -25,6 +26,7 @@ export class LLMJDAnalyzerProvider implements JDAnalyzerProvider {
       const result = await this.client.structuredCompletion({
         schemaName: "jd_analysis_result",
         schema: jdAnalysisResultSchema,
+        outputContract: jdAnalysisOutputContract,
         messages: [
           {
             role: "system",
