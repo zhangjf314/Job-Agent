@@ -1,37 +1,62 @@
 "use server";
 
 import { z } from "zod";
-import { publicAIConfig } from "@/lib/ai-config";
-import { LLMClient, LLMClientError } from "@/services/ai/llm-client";
+import { getAIConfig, publicAIConfig } from "@/lib/ai-config";
+import { createLLMClient } from "@/services/ai/provider-factory";
 
 const testSchema = z.object({
-  ok: z.boolean(),
-  message: z.string(),
+  ok: z.literal(true),
+  message: z.string().min(1),
 });
 
-export async function testAIConnectionAction() {
-  const config = publicAIConfig();
-  if (!config.hasApiKey || config.effectiveProvider === "mock") {
-    return { ok: true, message: "未配置模型密钥，当前使用本地规则模拟。" };
+export type AITestResult = {
+  ok: boolean;
+  message: string;
+  details?: string;
+};
+
+async function runMinimalTest(): Promise<AITestResult> {
+  const config = getAIConfig();
+  const publicConfig = publicAIConfig(config);
+  if (publicConfig.provider === "mock") {
+    return { ok: true, message: "当前为 Mock 模式；未向外部模型发送请求。" };
   }
-  return { ok: true, message: `真实模型服务已配置，当前模型：${config.model}。` };
+  if (publicConfig.configurationIssues.length) {
+    return {
+      ok: false,
+      message: "真实模型配置无效。",
+      details: publicConfig.configurationIssues.join("；"),
+    };
+  }
+
+  try {
+    const result = await createLLMClient(config).structuredCompletion({
+      schemaName: "ai_settings_test",
+      schema: testSchema,
+      maxOutputTokens: 64,
+      messages: [
+        { role: "system", content: "Return a minimal JSON health-check result." },
+        { role: "user", content: 'Return {"ok":true,"message":"connection healthy"}.' },
+      ],
+    });
+    return {
+      ok: true,
+      message: "真实模型连接与结构化输出均正常。",
+      details: `requestId=${result.metadata.requestId}，latency=${result.metadata.latencyMs}ms，tokens=${result.usage?.total_tokens ?? "未返回"}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: "真实模型测试失败。",
+      details: error instanceof Error ? error.message : "未知错误",
+    };
+  }
+}
+
+export async function testAIConnectionAction() {
+  return runMinimalTest();
 }
 
 export async function testAIStructuredOutputAction() {
-  try {
-    const result = await new LLMClient().structuredCompletion({
-      schemaName: "ai_settings_test",
-      schema: testSchema,
-      messages: [
-        { role: "system", content: "返回一个最小 JSON 健康检查结果。" },
-        { role: "user", content: "返回 {\"ok\":true,\"message\":\"结构化输出正常\"}。" },
-      ],
-    });
-    return { ok: true, message: result.data.message };
-  } catch (error) {
-    if (error instanceof LLMClientError && error.code === "missing_api_key") {
-      return { ok: true, message: "未配置模型密钥，仍可使用本地规则模拟。" };
-    }
-    return { ok: false, message: error instanceof Error ? error.message : "结构化输出测试失败。" };
-  }
+  return runMinimalTest();
 }

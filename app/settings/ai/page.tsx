@@ -1,11 +1,11 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { publicAIConfig } from "@/lib/ai-config";
-import { testAIConnectionAction, testAIStructuredOutputAction } from "./actions";
+import { AITestControls } from "./ai-test-controls";
 
 function providerLabel(value: string) {
   if (value === "llm_provider") return "真实模型服务";
-  if (value === "mock") return "本地规则模拟";
+  if (value === "mock") return "本地规则 Mock";
+  if (value === "configuration_error") return "配置错误";
   return value;
 }
 
@@ -20,28 +20,30 @@ export default function AISettingsPage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div>配置模式：{providerLabel(config.provider)}</div>
-          <div>实际使用：{providerLabel(config.effectiveProvider)}</div>
+          <div>实际状态：{providerLabel(config.effectiveProvider)}</div>
           <div>模型名称：{config.model}</div>
-          <div>模型密钥：{config.hasApiKey ? "已配置" : "未配置"}</div>
-          {!config.hasApiKey ? (
+          <div>兼容接口：{config.baseUrl || "(未配置)"}</div>
+          <div>模型密钥：{config.hasApiKey ? "已配置（值已隐藏）" : "未配置"}</div>
+          <div>
+            JSON 模式：{config.jsonMode ? "开启" : "关闭"}；失败回退 Mock：
+            {config.fallbackToMock ? "开启" : "关闭"}
+          </div>
+          <div>成本估算：{config.hasCostEstimation ? "已配置" : "未配置"}</div>
+          <div>
+            超时：{config.timeoutMs}ms；额外重试：{config.retryCount} 次；最大输出：
+            {config.maxOutputTokens} tokens
+          </div>
+          {config.configurationIssues.length ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-destructive">
+              配置错误：{config.configurationIssues.join("；")}
+            </div>
+          ) : null}
+          {config.provider === "mock" ? (
             <p className="text-muted-foreground">
-              当前未配置模型密钥，系统会继续使用本地规则模拟，不影响基础演示。
+              当前为 Mock 模式，测试按钮不会向外部服务发送请求。
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <form action={async () => {
-              "use server";
-              await testAIConnectionAction();
-            }}>
-              <Button type="submit" variant="outline">测试配置</Button>
-            </form>
-            <form action={async () => {
-              "use server";
-              await testAIStructuredOutputAction();
-            }}>
-              <Button type="submit">测试结构化输出</Button>
-            </form>
-          </div>
+          <AITestControls />
         </CardContent>
       </Card>
     </main>

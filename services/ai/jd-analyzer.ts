@@ -17,6 +17,7 @@ export class LLMJDAnalyzerProvider implements JDAnalyzerProvider {
   constructor(
     private readonly client = new LLMClient(),
     private readonly fallback = new MockJDAnalyzerProvider(),
+    private readonly fallbackEnabled = false,
   ) {}
 
   async analyze(rawText: string): Promise<JDAnalysisResult> {
@@ -33,8 +34,10 @@ export class LLMJDAnalyzerProvider implements JDAnalyzerProvider {
           { role: "user", content: rawText },
         ],
       });
-      return jdAnalysisResultSchema.parse(result.data) as JDAnalysisResult;
-    } catch {
+      return jdAnalysisResultSchema.parse(result.data);
+    } catch (error) {
+      if (!this.fallbackEnabled) throw error;
+      await this.client.recordFallback("jd_analysis_result", error);
       const mock = await this.fallback.analyze(rawText);
       return {
         ...mock,

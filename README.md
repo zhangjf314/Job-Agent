@@ -191,3 +191,9 @@ npm run seed             # 重建虚构 Demo 数据
 ## License
 
 当前仓库暂未附加开源许可证。在确认全部源码和四份简历模板的再许可权之前，不声明可自由复制、修改或再分发。
+
+## OpenAI-compatible LLM
+
+项目支持本地 Mock 与通用 OpenAI-compatible Chat Completions 两种模式。真实模式的配置、
+失败重试、结构化输出、显式 Mock 降级、观测字段及本地 Smoke Test 说明见
+[`docs/llm-provider.md`](docs/llm-provider.md)。默认 CI 仍使用 Mock，不访问真实模型服务。
