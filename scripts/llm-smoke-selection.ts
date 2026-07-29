@@ -62,3 +62,13 @@ export function smokeRequestBudget(
   return explicitMaximum ??
     (selected.size === 1 && selected.has("tailored-resume") ? 2 : 6);
 }
+
+export function smokeRequestPolicy(explicitMaximum?: number) {
+  if (explicitMaximum === undefined) return undefined;
+  return {
+    allowTransportRetry: false,
+    allowJsonRepair: false,
+    allowFactualityRepair: false,
+    allowFinalizationRetry: explicitMaximum > 1,
+  };
+}

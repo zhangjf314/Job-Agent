@@ -6,6 +6,11 @@ import {
   type AIConfig,
 } from "@/lib/ai-config";
 import { noopLLMCallObserver, type LLMCallObserver } from "./llm-observability";
+import {
+  safeSchemaDiagnosticMetadata,
+  summarizeSchemaIssues,
+  type SafeSchemaDiagnosticSummary,
+} from "./schema-diagnostics";
 
 export type LLMErrorCode =
   | "invalid_configuration"
@@ -57,6 +62,7 @@ export class LLMClientError extends Error {
   public finalizationRetryCount = 0;
   public externalRequestCount = 0;
   public latencyMs?: number;
+  public schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
 
   constructor(
     public readonly code: LLMErrorCode,
@@ -68,12 +74,14 @@ export class LLMClientError extends Error {
     details?: {
       responseSummary?: LLMResponseSafetySummary;
       usage?: Usage;
+      schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
     },
   ) {
     super(message);
     this.name = "LLMClientError";
     this.responseSummary = details?.responseSummary;
     this.usage = details?.usage;
+    this.schemaDiagnosticSummary = details?.schemaDiagnosticSummary;
   }
 }
 
@@ -346,7 +354,11 @@ export class LLMClient {
       reasoningFieldPresent ||= initial.reasoningFieldPresent;
       latestResponseSummary = initial.responseSafetySummary;
 
-      let parsed = this.validateContent(initial.content, input.schema);
+      let parsed = this.validateContent(
+        initial.content,
+        input.schemaName,
+        input.schema,
+      );
       if (!parsed.success && input.allowJsonRepair !== false) {
         repairCount = 1;
         const repair = await this.requestWithRetries(
@@ -370,18 +382,27 @@ export class LLMClient {
         httpStatus = repair.httpStatus;
         reasoningFieldPresent ||= repair.reasoningFieldPresent;
         latestResponseSummary = repair.responseSafetySummary;
-        parsed = this.validateContent(repair.content, input.schema);
+        parsed = this.validateContent(
+          repair.content,
+          input.schemaName,
+          input.schema,
+        );
       }
 
       if (!parsed.success) {
         throw new LLMClientError(
           parsed.code,
-          `LLM structured output remained invalid after one repair attempt: ${parsed.problem}`,
+          parsed.code === "LLM_SCHEMA_VALIDATION_FAILED"
+            ? "LLM structured output does not match the required schema."
+            : "LLM response was not a complete JSON value.",
           false,
           httpStatus,
           providerRequestId,
           0,
-          { responseSummary: latestResponseSummary },
+          {
+            responseSummary: latestResponseSummary,
+            schemaDiagnosticSummary: parsed.schemaDiagnosticSummary,
+          },
         );
       }
 
@@ -471,6 +492,7 @@ export class LLMClient {
           reasoningFieldPresent,
           httpStatus: normalized.httpStatus ?? httpStatus,
           ...responseMetadata(latestResponseSummary),
+          ...safeSchemaDiagnosticMetadata(normalized.schemaDiagnosticSummary),
           priceCurrency: this.estimateCost(usage) === undefined ? undefined : this.config.priceCurrency,
           providerRequested: "llm_provider",
           providerUsed: "llm_provider",
@@ -508,11 +530,13 @@ export class LLMClient {
 
   private validateContent<T>(
     content: string,
+    schemaName: string,
     schema: z.ZodType<T>,
   ): { success: true; data: T } | {
     success: false;
     problem: string;
     code: "LLM_STRUCTURED_OUTPUT_INVALID" | "LLM_SCHEMA_VALIDATION_FAILED";
+    schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
   } {
     let json: unknown;
     try {
@@ -530,6 +554,12 @@ export class LLMClient {
       success: false,
       problem: validationSummary(parsed.error),
       code: "LLM_SCHEMA_VALIDATION_FAILED",
+      schemaDiagnosticSummary: summarizeSchemaIssues(
+        schemaName,
+        parsed.error.issues,
+        json,
+        schema,
+      ),
     };
   }
 
