@@ -187,8 +187,8 @@ describe("rewriteExplanation strict contract", () => {
 
   it("states array, strings, limit, prohibition, and one array example", () => {
     const contract = buildRewriteExplanationOutputContract();
-    expect(contract).toContain("must be a JSON array of strings");
-    expect(contract).toContain("at most 2 items");
+    expect(contract).toContain("JSON string array");
+    expect(contract).toContain("0..2 concise non-empty items");
     expect(contract).toContain("never a single string");
     expect(contract).toContain('"rewriteExplanation":[');
     expect(contract).not.toMatch(/"rewriteExplanation"\s*:\s*"/);

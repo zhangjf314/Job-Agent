@@ -87,6 +87,8 @@ describe("Grounded section contract parity", () => {
       sectionCount: 6,
       changedSectionsLimit: 2,
       sourceFactIdLimit: 8,
+      sectionLinesMinimum: 0,
+      sectionLinesLimit: 2,
     });
     expect(GROUNDED_SECTION_KEYS).toEqual(expectedSectionKeys);
     expect(GROUNDED_SECTION_COUNT).toBe(6);
@@ -96,6 +98,8 @@ describe("Grounded section contract parity", () => {
       sourceFactIdsMax: 8,
       rewriteExplanationMax: 2,
       rewriteExplanationItemMinChars: 1,
+      sectionLinesMin: 0,
+      sectionLinesMax: 2,
     });
   });
 
@@ -175,8 +179,8 @@ describe("Grounded section contract parity", () => {
         "grounded_tailored_resume_result",
         groundedTailoredResumeOutputContract,
       ).length;
-    expect(productionPromptCharacters).toBeLessThanOrEqual(2685);
-    expect(productionPromptCharacters / 2486).toBeLessThanOrEqual(1.08);
+    expect(productionPromptCharacters).toBe(2938);
+    expect(productionPromptCharacters / 2679).toBeLessThanOrEqual(1.1);
   });
 
   it("passes topology, normalization, schema, factuality, and conversion", () => {

@@ -76,13 +76,17 @@ describe("Grounded array cardinality contracts", () => {
       sourceFactIdsMax: 8,
       rewriteExplanationMax: 2,
       rewriteExplanationItemMinChars: 1,
+      sectionLinesMin: 0,
+      sectionLinesMax: 2,
     });
     const contract = buildGroundedArrayCardinalityOutputContract();
     expect(contract).toContain("changedSections:0..2 unique canonical");
     expect(contract).toContain("most materially changed, not exhaustive");
     expect(contract).toContain("sourceFactIds:0..8 unique supplied F_*");
     expect(contract).toContain("minimum sufficient evidence");
-    expect(contract).toContain("split into independent understandable GroundedText lines");
+    expect(contract).toContain(
+      "do not emit extra lines merely to use every fact",
+    );
   });
 
   it.each([0, 1, 2])("accepts %i changed section types", (count) => {
