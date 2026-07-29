@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
+  careerStrategyOutputContract,
+  tailoredResumeOutputContract,
+} from "../services/ai/output-contracts";
+import {
   AIConfigurationError,
   getAIConfig,
   isLLMConfigured,
@@ -244,6 +248,14 @@ describe("OpenAI-compatible HTTP client", () => {
 });
 
 describe("structured output", () => {
+  it("bounds complex business contracts for fixed provider output budgets", () => {
+    expect(tailoredResumeOutputContract).toContain("contentMarkdown at most 900 Chinese characters");
+    expect(tailoredResumeOutputContract).toContain("4 to 6 sections");
+    expect(careerStrategyOutputContract).toContain("exactly 1 recommendation");
+    expect(careerStrategyOutputContract).toContain("exactly 2 actionPlan items");
+    expect(careerStrategyOutputContract).toContain("at most 2 short items");
+  });
+
   it("uses only final content and records reasoning-field presence without storing reasoning text", async () => {
     const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
     const observer: LLMCallObserver = { async record(record) { records.push(record); } };
