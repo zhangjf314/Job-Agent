@@ -68,7 +68,7 @@ export function smokeRequestPolicy(explicitMaximum?: number) {
   return {
     allowTransportRetry: false,
     allowJsonRepair: false,
-    allowFactualityRepair: false,
-    allowFinalizationRetry: explicitMaximum > 1,
+    allowFactualityRepair: explicitMaximum > 1,
+    allowFinalizationRetry: false,
   };
 }

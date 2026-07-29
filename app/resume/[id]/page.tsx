@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { listApplicationsByResumeId } from "@/services/applications/application-service";
 import { getTailoredResumeByResumeId } from "@/services/jd-service";
 import { getResumeById } from "@/services/resume-service";
+import { getApplicationMaterials } from "@/services/resume-application-materials";
 import { renderResumeMarkdown, type RenderedResumeMarkdown } from "@/services/resume-templates/renderer";
 import {
   archiveResumeAction,
@@ -24,15 +25,6 @@ import {
 type Props = {
   params: Promise<{ id: string }>;
 };
-
-function getApplicationMaterials(value: unknown) {
-  if (!value || typeof value !== "object" || !("applicationMaterials" in value)) return null;
-  const materials = (value as { applicationMaterials?: unknown }).applicationMaterials;
-  if (!materials || typeof materials !== "object") return null;
-  const item = materials as Record<string, unknown>;
-  if (![item.selfIntroduction, item.applicationEmail, item.recruiterMessage].every((entry) => typeof entry === "string")) return null;
-  return item as { selfIntroduction: string; applicationEmail: string; recruiterMessage: string };
-}
 
 export default async function ResumeDetailPage({ params }: Props) {
   const { id } = await params;

@@ -283,6 +283,8 @@ export function evaluateTailoredResumeFactuality(
 }
 
 export class TailoredResumeFactualityError extends AppError {
+  public diagnostics?: unknown;
+
   constructor(public readonly report: FactualityReport) {
     super(
       "定制简历包含无法由候选人事实支持的内容，已阻止保存。",

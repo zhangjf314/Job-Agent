@@ -27,6 +27,10 @@ import {
   type FactualityReport,
   type FactualityStatus,
 } from "./tailored-resume-factuality";
+import {
+  GROUNDED_SOURCE_FACT_ID_LIMIT,
+  normalizeGroundedTailoredResume,
+} from "./tailored-resume-grounded-normalizer";
 
 export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
@@ -58,6 +62,13 @@ export type TailoredResumeDiagnostics = {
   outputTokens?: number;
   totalTokens?: number;
   reasoningFieldPresent: boolean;
+  groundedNormalizationApplied: boolean;
+  defaultedApplicationMaterialArrayCount: number;
+  defaultedApplicationMaterialPaths: string[];
+  canonicalizedSectionTypeCount: number;
+  deduplicatedSourceFactIdCount: number;
+  sourceFactIdLimit: number;
+  httpStatus?: number;
   responseSafetySummary?: LLMResponseSafetySummary;
 };
 
@@ -93,6 +104,13 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         externalRequestCount: 0,
         latencyMs: 0,
         reasoningFieldPresent: false,
+        groundedNormalizationApplied: false,
+        defaultedApplicationMaterialArrayCount: 0,
+        defaultedApplicationMaterialPaths: [],
+        canonicalizedSectionTypeCount: 0,
+        deduplicatedSourceFactIdCount: 0,
+        sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+        httpStatus: undefined,
       },
     };
   }
@@ -118,6 +136,10 @@ function diagnostics(
   initial: GroundedCompletion,
   repaired?: GroundedCompletion,
 ): TailoredResumeDiagnostics {
+  const normalizationSummaries = [
+    initial.metadata.groundedNormalizationSummary,
+    repaired?.metadata.groundedNormalizationSummary,
+  ].filter((summary) => summary !== undefined);
   return {
     factualityStatus: report.status,
     factualityViolationCount: report.violations.length,
@@ -140,6 +162,31 @@ function diagnostics(
     totalTokens: add(initial.usage?.total_tokens, repaired?.usage?.total_tokens),
     reasoningFieldPresent:
       initial.metadata.reasoningFieldPresent || (repaired?.metadata.reasoningFieldPresent ?? false),
+    groundedNormalizationApplied: normalizationSummaries.some(
+      (summary) => summary.groundedNormalizationApplied,
+    ),
+    defaultedApplicationMaterialArrayCount: normalizationSummaries.reduce(
+      (total, summary) =>
+        total + summary.defaultedApplicationMaterialArrays.length,
+      0,
+    ),
+    defaultedApplicationMaterialPaths: [
+      ...new Set(
+        normalizationSummaries.flatMap(
+          (summary) => summary.defaultedApplicationMaterialArrays,
+        ),
+      ),
+    ],
+    canonicalizedSectionTypeCount: normalizationSummaries.reduce(
+      (total, summary) => total + summary.canonicalizedSectionTypes,
+      0,
+    ),
+    deduplicatedSourceFactIdCount: normalizationSummaries.reduce(
+      (total, summary) => total + summary.deduplicatedFactIdCount,
+      0,
+    ),
+    sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+    httpStatus: repaired?.metadata.httpStatus ?? initial.metadata.httpStatus,
     responseSafetySummary:
       repaired?.metadata.responseSafetySummary ?? initial.metadata.responseSafetySummary,
   };
@@ -197,6 +244,7 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       const initial = await this.client.structuredCompletion({
         schemaName: "grounded_tailored_resume_result",
         schema: groundedTailoredResumeSchema,
+        normalizeParsedJson: normalizeGroundedTailoredResume,
         outputContract: groundedTailoredResumeOutputContract,
         messages: buildGroundedTailoredResumeMessages(candidateFacts, jobRequirements),
         finalizationRetryMessages:
@@ -216,6 +264,7 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         repaired = await this.client.structuredCompletion({
           schemaName: "grounded_tailored_resume_factuality_repair",
           schema: groundedTailoredResumeSchema,
+          normalizeParsedJson: normalizeGroundedTailoredResume,
           outputContract: groundedTailoredResumeOutputContract,
           allowTransportRetry: input.requestPolicy?.allowTransportRetry,
           allowJsonRepair: input.requestPolicy?.allowJsonRepair,
@@ -278,9 +327,27 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           finalizationRetryCount: finalDiagnostics.finalizationRetryCount,
           externalRequestCount: finalDiagnostics.externalRequestCount,
           reasoningFieldPresent: finalDiagnostics.reasoningFieldPresent,
+          groundedNormalizationApplied:
+            finalDiagnostics.groundedNormalizationApplied,
+          defaultedApplicationMaterialArrayCount:
+            finalDiagnostics.defaultedApplicationMaterialArrayCount,
+          defaultedApplicationMaterialPaths:
+            finalDiagnostics.defaultedApplicationMaterialPaths,
+          canonicalizedSectionTypeCount:
+            finalDiagnostics.canonicalizedSectionTypeCount,
+          deduplicatedSourceFactIdCount:
+            finalDiagnostics.deduplicatedSourceFactIdCount,
+          sourceFactIdLimit: finalDiagnostics.sourceFactIdLimit,
+          httpStatus: finalDiagnostics.httpStatus,
+          jsonStatus: "passed",
+          groundedSchemaStatus: "passed",
         },
       });
-      if (report.status !== "pass") throw new TailoredResumeFactualityError(report);
+      if (report.status !== "pass") {
+        const failure = new TailoredResumeFactualityError(report);
+        failure.diagnostics = finalDiagnostics;
+        throw failure;
+      }
       return {
         result: stripGroundingMetadata(grounded),
         diagnostics: finalDiagnostics,

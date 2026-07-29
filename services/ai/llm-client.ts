@@ -11,6 +11,11 @@ import {
   summarizeSchemaIssues,
   type SafeSchemaDiagnosticSummary,
 } from "./schema-diagnostics";
+import {
+  safeGroundedNormalizationMetadata,
+  type GroundedNormalizationResult,
+  type GroundedNormalizationSummary,
+} from "./tailored-resume-grounded-normalizer";
 
 export type LLMErrorCode =
   | "invalid_configuration"
@@ -31,6 +36,7 @@ export type LLMErrorCode =
   | "LLM_FINALIZATION_RETRY_FAILED"
   | "LLM_STRUCTURED_OUTPUT_INVALID"
   | "LLM_SCHEMA_VALIDATION_FAILED"
+  | "GROUNDED_NORMALIZATION_FAILED"
   | "SMOKE_EXTERNAL_REQUEST_LIMIT_REACHED";
 
 type Usage = {
@@ -64,6 +70,7 @@ export class LLMClientError extends Error {
   public externalRequestCount = 0;
   public latencyMs?: number;
   public schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
+  public groundedNormalizationSummary?: GroundedNormalizationSummary;
 
   constructor(
     public readonly code: LLMErrorCode,
@@ -76,6 +83,7 @@ export class LLMClientError extends Error {
       responseSummary?: LLMResponseSafetySummary;
       usage?: Usage;
       schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
+      groundedNormalizationSummary?: GroundedNormalizationSummary;
     },
   ) {
     super(message);
@@ -83,6 +91,7 @@ export class LLMClientError extends Error {
     this.responseSummary = details?.responseSummary;
     this.usage = details?.usage;
     this.schemaDiagnosticSummary = details?.schemaDiagnosticSummary;
+    this.groundedNormalizationSummary = details?.groundedNormalizationSummary;
   }
 }
 
@@ -103,6 +112,7 @@ export type StructuredCompletionInput<T> = {
   allowFinalizationRetry?: boolean;
   allowJsonRepair?: boolean;
   allowTransportRetry?: boolean;
+  normalizeParsedJson?: (value: unknown) => GroundedNormalizationResult;
 };
 
 type CompletionResponse = {
@@ -128,6 +138,10 @@ export type LLMCompletionMetadata = {
   externalRequestCount: number;
   reasoningFieldPresent: boolean;
   thinkingModeRequested: AIConfig["thinkingMode"];
+  groundedNormalizationSummary?: GroundedNormalizationSummary;
+  httpStatus?: number;
+  jsonStatus?: "passed" | "failed";
+  schemaValidationStatus?: "passed" | "failed" | "not_reached";
   responseSafetySummary: LLMResponseSafetySummary;
   estimatedCostMicros?: number;
   priceCurrency?: string;
@@ -298,6 +312,7 @@ export class LLMClient {
     let httpStatus: number | undefined;
     let reasoningFieldPresent = false;
     let latestResponseSummary: LLMResponseSafetySummary | undefined;
+    let latestGroundedNormalizationSummary: GroundedNormalizationSummary | undefined;
 
     try {
       let initial: RequestResult;
@@ -360,7 +375,9 @@ export class LLMClient {
         initial.content,
         input.schemaName,
         input.schema,
+        input.normalizeParsedJson,
       );
+      latestGroundedNormalizationSummary = parsed.groundedNormalizationSummary;
       if (!parsed.success && input.allowJsonRepair !== false) {
         repairCount = 1;
         const repair = await this.requestWithRetries(
@@ -388,7 +405,9 @@ export class LLMClient {
           repair.content,
           input.schemaName,
           input.schema,
+          input.normalizeParsedJson,
         );
+        latestGroundedNormalizationSummary = parsed.groundedNormalizationSummary;
       }
 
       if (!parsed.success) {
@@ -396,7 +415,9 @@ export class LLMClient {
           parsed.code,
           parsed.code === "LLM_SCHEMA_VALIDATION_FAILED"
             ? "LLM structured output does not match the required schema."
-            : "LLM response was not a complete JSON value.",
+            : parsed.code === "GROUNDED_NORMALIZATION_FAILED"
+              ? "Grounded output normalization failed."
+              : "LLM response was not a complete JSON value.",
           false,
           httpStatus,
           providerRequestId,
@@ -404,6 +425,7 @@ export class LLMClient {
           {
             responseSummary: latestResponseSummary,
             schemaDiagnosticSummary: parsed.schemaDiagnosticSummary,
+            groundedNormalizationSummary: parsed.groundedNormalizationSummary,
           },
         );
       }
@@ -420,6 +442,10 @@ export class LLMClient {
         externalRequestCount,
         reasoningFieldPresent,
         thinkingModeRequested: this.config.thinkingMode,
+        groundedNormalizationSummary: latestGroundedNormalizationSummary,
+        httpStatus,
+        jsonStatus: "passed",
+        schemaValidationStatus: "passed",
         responseSafetySummary: latestResponseSummary!,
         estimatedCostMicros,
         priceCurrency: estimatedCostMicros === undefined ? undefined : this.config.priceCurrency,
@@ -446,7 +472,10 @@ export class LLMClient {
           externalRequestCount,
           reasoningFieldPresent,
           thinkingModeRequested: this.config.thinkingMode,
+          ...safeGroundedNormalizationMetadata(latestGroundedNormalizationSummary),
           httpStatus,
+          jsonStatus: "passed",
+          schemaValidationStatus: "passed",
           ...responseMetadata(latestResponseSummary),
           priceCurrency: metadata.priceCurrency,
           providerRequested: "llm_provider",
@@ -467,6 +496,9 @@ export class LLMClient {
       const durationMs = Date.now() - startedAt;
       normalized.usage = usage;
       normalized.responseSummary = latestResponseSummary;
+      latestGroundedNormalizationSummary =
+        normalized.groundedNormalizationSummary ??
+        latestGroundedNormalizationSummary;
       normalized.retryCount = retryCount;
       normalized.repairCount = repairCount;
       normalized.finalizationRetryCount = finalizationRetryCount;
@@ -495,7 +527,22 @@ export class LLMClient {
           externalRequestCount,
           reasoningFieldPresent,
           thinkingModeRequested: this.config.thinkingMode,
+          ...safeGroundedNormalizationMetadata(latestGroundedNormalizationSummary),
           httpStatus: normalized.httpStatus ?? httpStatus,
+          jsonStatus:
+            normalized.code === "LLM_STRUCTURED_OUTPUT_INVALID"
+              ? "failed"
+              : normalized.code === "LLM_SCHEMA_VALIDATION_FAILED" ||
+                  normalized.code === "GROUNDED_NORMALIZATION_FAILED"
+                ? "passed"
+                : undefined,
+          schemaValidationStatus:
+            normalized.code === "LLM_SCHEMA_VALIDATION_FAILED"
+              ? "failed"
+              : normalized.code === "GROUNDED_NORMALIZATION_FAILED" ||
+                  normalized.code === "LLM_STRUCTURED_OUTPUT_INVALID"
+                ? "not_reached"
+                : undefined,
           ...responseMetadata(latestResponseSummary),
           ...safeSchemaDiagnosticMetadata(normalized.schemaDiagnosticSummary),
           priceCurrency: this.estimateCost(usage) === undefined ? undefined : this.config.priceCurrency,
@@ -538,11 +585,20 @@ export class LLMClient {
     content: string,
     schemaName: string,
     schema: z.ZodType<T>,
-  ): { success: true; data: T } | {
+    normalizeParsedJson?: (value: unknown) => GroundedNormalizationResult,
+  ): {
+    success: true;
+    data: T;
+    groundedNormalizationSummary?: GroundedNormalizationSummary;
+  } | {
     success: false;
     problem: string;
-    code: "LLM_STRUCTURED_OUTPUT_INVALID" | "LLM_SCHEMA_VALIDATION_FAILED";
+    code:
+      | "LLM_STRUCTURED_OUTPUT_INVALID"
+      | "LLM_SCHEMA_VALIDATION_FAILED"
+      | "GROUNDED_NORMALIZATION_FAILED";
     schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
+    groundedNormalizationSummary?: GroundedNormalizationSummary;
   } {
     let json: unknown;
     try {
@@ -554,8 +610,28 @@ export class LLMClient {
         code: "LLM_STRUCTURED_OUTPUT_INVALID",
       };
     }
+    let groundedNormalizationSummary: GroundedNormalizationSummary | undefined;
+    if (normalizeParsedJson) {
+      try {
+        const result = normalizeParsedJson(json);
+        json = result.normalized;
+        groundedNormalizationSummary = result.summary;
+      } catch {
+        return {
+          success: false,
+          problem: "Grounded output normalization failed.",
+          code: "GROUNDED_NORMALIZATION_FAILED",
+        };
+      }
+    }
     const parsed = schema.safeParse(json);
-    if (parsed.success) return { success: true, data: parsed.data };
+    if (parsed.success) {
+      return {
+        success: true,
+        data: parsed.data,
+        groundedNormalizationSummary,
+      };
+    }
     return {
       success: false,
       problem: validationSummary(parsed.error),
@@ -566,6 +642,7 @@ export class LLMClient {
         json,
         schema,
       ),
+      groundedNormalizationSummary,
     };
   }
 

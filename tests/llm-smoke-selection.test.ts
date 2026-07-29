@@ -68,7 +68,7 @@ describe("LLM smoke selection", () => {
     expect(transport).toHaveBeenCalledOnce();
   });
 
-  it("reserves finalization only when an explicit budget has a second request", () => {
+  it("reserves only factuality repair when an explicit budget has a second request", () => {
     expect(smokeRequestPolicy(1)).toEqual({
       allowTransportRetry: false,
       allowJsonRepair: false,
@@ -78,8 +78,8 @@ describe("LLM smoke selection", () => {
     expect(smokeRequestPolicy(2)).toEqual({
       allowTransportRetry: false,
       allowJsonRepair: false,
-      allowFactualityRepair: false,
-      allowFinalizationRetry: true,
+      allowFactualityRepair: true,
+      allowFinalizationRetry: false,
     });
     expect(smokeRequestPolicy()).toBeUndefined();
   });

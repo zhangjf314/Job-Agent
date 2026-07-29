@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { tailoredResumeResultSchema } from "@/schemas/jd";
 import type { TailoredResumeResult } from "@/types/jd";
+import { GROUNDED_SOURCE_FACT_ID_LIMIT } from "./tailored-resume-grounded-normalizer";
 
 export const groundedClaimKinds = ["fact", "goal", "format"] as const;
 
 export const groundedTextSchema = z.object({
   text: z.string().trim().min(1).max(80),
-  sourceFactIds: z.array(z.string().trim().min(1)).max(4),
+  sourceFactIds: z.array(z.string().trim().min(1)).max(GROUNDED_SOURCE_FACT_ID_LIMIT),
   kind: z.enum(groundedClaimKinds),
 });
 
@@ -88,10 +89,11 @@ export function groundedClaimEntries(input: GroundedTailoredResume) {
 }
 
 export const groundedTailoredResumeOutputContract = [
-  "Return one compact JSON object with sections,rewriteExplanation,changedSections,missingFields,improvementQuestions,qualityWarnings,applicationMaterials.",
-  "sections:4..6 items {type,title,lines:0..2 GroundedText,order}; GroundedText:{text:max 80 Chinese characters,sourceFactIds:0..4,kind:fact|goal|format}.",
+  "Return compact JSON with sections,rewriteExplanation,changedSections,missingFields,improvementQuestions,qualityWarnings,applicationMaterials.",
+  "sections:4..6 in fixed order summary,skills,projects,experiences,education,others; items:{title,lines:0..2 GroundedText,order}; system assigns type.",
+  "GroundedText:{text:max80 Chinese chars,sourceFactIds:0..8 unique F_* IDs,kind:fact|goal|format}.",
   "Every factual line must use kind=fact and cite only supplied F_* candidate IDs. Never cite J_REQ_* IDs.",
   "Goal text must use kind=goal and must clearly say target, plan, hope, learning, or future. Format text is only a heading or label.",
-  "Each explanatory/warning array has at most 2 short strings. Each application material has 1..2 GroundedText items.",
-  "Keep every text concise, keep the full result within 1600 output tokens, and return JSON only.",
+  "Each explanatory/warning array has at most 2 short strings. applicationMaterials must include selfIntroduction,applicationEmail,recruiterMessage, each with 1..2 GroundedText; omit none.",
+  "Keep text concise, stay within 1600 output tokens, return JSON only.",
 ].join(" ");
