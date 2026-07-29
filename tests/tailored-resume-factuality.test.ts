@@ -199,9 +199,11 @@ describe("candidate fact registry", () => {
       "fixed order summary,skills,projects,experiences,education,others",
     );
     expect(groundedTailoredResumeOutputContract).toContain(
-      "sourceFactIds:0..8 unique F_* IDs",
+      "sourceFactIds:0..8 unique supplied F_*",
     );
-    expect(groundedTailoredResumeOutputContract).toContain("omit none");
+    expect(groundedTailoredResumeOutputContract).toContain(
+      "applicationMaterials require",
+    );
   });
 
   it("generates stable IDs, normalizes empty values, and deduplicates skills", () => {

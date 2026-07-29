@@ -29,6 +29,7 @@ import {
 } from "./tailored-resume-factuality";
 import {
   GROUNDED_SOURCE_FACT_ID_LIMIT,
+  GROUNDED_TAILORED_RESUME_LIMITS,
   normalizeGroundedTailoredResume,
 } from "./tailored-resume-grounded-normalizer";
 
@@ -68,6 +69,9 @@ export type TailoredResumeDiagnostics = {
   canonicalizedSectionTypeCount: number;
   canonicalizedSectionOrderCount: number;
   deduplicatedSourceFactIdCount: number;
+  changedSectionsCount: number | null;
+  maximumChangedSections: number;
+  maximumSourceFactIdsObserved: number | null;
   sourceFactIdLimit: number;
   httpStatus?: number;
   responseSafetySummary?: LLMResponseSafetySummary;
@@ -111,6 +115,10 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         canonicalizedSectionTypeCount: 0,
         canonicalizedSectionOrderCount: 0,
         deduplicatedSourceFactIdCount: 0,
+        changedSectionsCount: 0,
+        maximumChangedSections:
+          GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
+        maximumSourceFactIdsObserved: 0,
         sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
         httpStatus: undefined,
       },
@@ -191,6 +199,20 @@ function diagnostics(
       (total, summary) => total + summary.deduplicatedFactIdCount,
       0,
     ),
+    changedSectionsCount:
+      repaired?.metadata.groundedNormalizationSummary?.changedSectionsCount ??
+      initial.metadata.groundedNormalizationSummary?.changedSectionsCount ??
+      null,
+    maximumChangedSections:
+      repaired?.metadata.groundedNormalizationSummary?.changedSectionsLimit ??
+      initial.metadata.groundedNormalizationSummary?.changedSectionsLimit ??
+      GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
+    maximumSourceFactIdsObserved:
+      repaired?.metadata.groundedNormalizationSummary
+        ?.maximumSourceFactIdsObserved ??
+      initial.metadata.groundedNormalizationSummary
+        ?.maximumSourceFactIdsObserved ??
+      null,
     sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
     httpStatus: repaired?.metadata.httpStatus ?? initial.metadata.httpStatus,
     responseSafetySummary:
@@ -344,9 +366,15 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             finalDiagnostics.canonicalizedSectionOrderCount,
           deduplicatedSourceFactIdCount:
             finalDiagnostics.deduplicatedSourceFactIdCount,
+          changedSectionsCount: finalDiagnostics.changedSectionsCount,
+          maximumChangedSections: finalDiagnostics.maximumChangedSections,
+          maximumSourceFactIdsObserved:
+            finalDiagnostics.maximumSourceFactIdsObserved,
           sourceFactIdLimit: finalDiagnostics.sourceFactIdLimit,
           httpStatus: finalDiagnostics.httpStatus,
           jsonStatus: "passed",
+          normalizationStatus: "passed",
+          schemaStatus: "passed",
           groundedSchemaStatus: "passed",
         },
       });

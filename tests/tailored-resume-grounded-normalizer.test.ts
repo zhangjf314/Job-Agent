@@ -392,7 +392,14 @@ describe("strict grounded tailored-resume normalization", () => {
       canonicalizedSectionTypeCount: 1,
       canonicalizedSectionOrderCount: 0,
       deduplicatedSourceFactIdCount: 1,
+      changedSectionsCount: 0,
+      maximumChangedSections: 2,
+      maximumSourceFactIdsObserved: 2,
       sourceFactIdLimit: 8,
+      jsonStatus: "passed",
+      normalizationStatus: "passed",
+      schemaStatus: "passed",
+      factualityStatus: "not_reached",
     });
     const observed = JSON.stringify(records);
     expect(observed).not.toContain("PRIVATE_INVALID_TYPE");
@@ -469,6 +476,13 @@ describe("strict grounded tailored-resume normalization", () => {
       defaultedApplicationMaterialArrayCount: 0,
       canonicalizedSectionTypeCount: 1,
       schemaIssueCount: 3,
+      changedSectionsCount: 0,
+      maximumChangedSections: 2,
+      maximumSourceFactIdsObserved: 1,
+      jsonStatus: "passed",
+      normalizationStatus: "passed",
+      schemaStatus: "failed",
+      factualityStatus: "not_reached",
     });
     const observed = JSON.stringify(records);
     expect(observed).not.toContain("PRIVATE_INVALID_TYPE");
@@ -545,6 +559,9 @@ describe("strict grounded tailored-resume normalization", () => {
       normalizationUnknownKeyCount: 1,
       normalizationUnknownValueTypeCounts: { object: 1 },
       jsonStatus: "passed",
+      normalizationStatus: "failed",
+      schemaStatus: "not_reached",
+      factualityStatus: "not_reached",
       schemaValidationStatus: "not_reached",
     });
     const observed = JSON.stringify({ caught, records });

@@ -12,6 +12,7 @@ import {
 import type { SafeSchemaDiagnosticSummary } from "../services/ai/schema-diagnostics";
 import type { GroundedNormalizationDiagnosticSummary } from "../services/ai/grounded-normalization-diagnostics";
 import type { GroundedNormalizationSummary } from "../services/ai/tailored-resume-grounded-normalizer";
+import { tailoredResumePipelineStageStatuses } from "../services/ai/pipeline-stage-status";
 import { TailoredResumeFactualityError } from "../services/ai/tailored-resume-factuality";
 import { createDatabaseLLMCallObserver } from "../services/ai/llm-observability";
 import {
@@ -309,6 +310,16 @@ async function main() {
       summary.responseSafetySummary ??
       summary.diagnostics?.responseSafetySummary ??
       summary.metadata?.responseSafetySummary;
+    const pipelineStages = summary.name === "Tailored resume"
+      ? tailoredResumePipelineStageStatuses({
+          success: summary.success,
+          errorCategory: summary.errorCategory,
+          normalizationSummaryPresent:
+            summary.groundedNormalizationSummary !== undefined ||
+            summary.diagnostics !== undefined,
+          factualityStatus: summary.diagnostics?.factualityStatus,
+        })
+      : undefined;
     console.log(JSON.stringify({
       function: summary.name,
       status: summary.success ? "success" : "failed",
@@ -331,16 +342,8 @@ async function main() {
       estimatedCostMicros: summary.metadata?.estimatedCostMicros,
       costCurrency: summary.metadata?.priceCurrency,
       fallbackUsed: false,
-      jsonParse:
-        summary.success ||
-        summary.diagnostics !== undefined ||
-        summary.errorCategory === "LLM_SCHEMA_VALIDATION_FAILED" ||
-        summary.errorCategory === "GROUNDED_NORMALIZATION_FAILED" ||
-        summary.errorCategory === "TAILORED_RESUME_FACTUALITY_VIOLATION"
-          ? "passed"
-          : summary.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID"
-            ? "failed"
-            : undefined,
+      jsonParse: pipelineStages?.jsonStatus ??
+        (summary.success ? "passed" : undefined),
       schemaValidation:
         summary.success || summary.diagnostics !== undefined
           ? "passed"
@@ -348,16 +351,11 @@ async function main() {
               summary.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID"
             ? "not_reached"
             : "failed",
-      groundedSchemaStatus:
-        summary.diagnostics || summary.success
-          ? "passed"
-          : summary.errorCategory === "LLM_SCHEMA_VALIDATION_FAILED"
-            ? "failed"
-            : "not_reached",
+      groundedSchemaStatus: pipelineStages?.schemaStatus,
       schemaIssueCount:
         summary.schemaDiagnosticSummary?.issueCount ??
         (summary.diagnostics || summary.success ? 0 : undefined),
-      factualityStatus: summary.diagnostics?.factualityStatus,
+      factualityStatus: pipelineStages?.factualityStatus,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,
       groundedClaimCount: summary.diagnostics?.groundedClaimCount,
       ungroundedClaimCount: summary.diagnostics?.ungroundedClaimCount,
@@ -367,12 +365,7 @@ async function main() {
         summary.diagnostics?.groundedNormalizationApplied ??
         summary.metadata?.groundedNormalizationSummary?.groundedNormalizationApplied ??
         summary.groundedNormalizationSummary?.groundedNormalizationApplied,
-      normalizationStatus:
-        summary.diagnostics || summary.success
-          ? "passed"
-          : summary.errorCategory === "GROUNDED_NORMALIZATION_FAILED"
-            ? "failed"
-            : "not_reached",
+      normalizationStatus: pipelineStages?.normalizationStatus,
       normalizationIssueCount:
         summary.groundedNormalizationDiagnosticSummary?.issueCount ??
         (summary.diagnostics || summary.success ? 0 : undefined),
@@ -445,6 +438,19 @@ async function main() {
         summary.diagnostics?.deduplicatedSourceFactIdCount ??
         summary.metadata?.groundedNormalizationSummary?.deduplicatedFactIdCount ??
         summary.groundedNormalizationSummary?.deduplicatedFactIdCount,
+      changedSectionsCount:
+        summary.diagnostics?.changedSectionsCount ??
+        summary.metadata?.groundedNormalizationSummary?.changedSectionsCount ??
+        summary.groundedNormalizationSummary?.changedSectionsCount,
+      maximumChangedSections:
+        summary.diagnostics?.maximumChangedSections ??
+        summary.metadata?.groundedNormalizationSummary?.changedSectionsLimit ??
+        summary.groundedNormalizationSummary?.changedSectionsLimit,
+      maximumSourceFactIdsObserved:
+        summary.diagnostics?.maximumSourceFactIdsObserved ??
+        summary.metadata?.groundedNormalizationSummary
+          ?.maximumSourceFactIdsObserved ??
+        summary.groundedNormalizationSummary?.maximumSourceFactIdsObserved,
       sourceFactIdLimit:
         summary.diagnostics?.sourceFactIdLimit ??
         summary.metadata?.groundedNormalizationSummary?.sourceFactIdLimit ??

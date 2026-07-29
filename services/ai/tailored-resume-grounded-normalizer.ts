@@ -4,13 +4,14 @@ import {
   GROUNDED_ROOT_KEYS,
   GROUNDED_SECTION_KEYS,
   GROUNDED_SECTION_TYPES_BY_POSITION,
-  GROUNDED_SOURCE_FACT_ID_LIMIT,
+  GROUNDED_TAILORED_RESUME_LIMITS,
   GROUNDED_TEXT_KEYS,
 } from "./grounded-tailored-resume-contract";
 
 export {
   GROUNDED_SECTION_TYPES_BY_POSITION,
   GROUNDED_SOURCE_FACT_ID_LIMIT,
+  GROUNDED_TAILORED_RESUME_LIMITS,
   REQUIRED_APPLICATION_MATERIAL_PATHS,
 } from "./grounded-tailored-resume-contract";
 
@@ -20,6 +21,9 @@ export type GroundedNormalizationSummary = {
   canonicalizedSectionTypes: number;
   canonicalizedSectionOrders: number;
   deduplicatedFactIdCount: number;
+  changedSectionsCount: number | null;
+  maximumSourceFactIdsObserved: number | null;
+  changedSectionsLimit: number;
   sourceFactIdLimit: number;
 };
 
@@ -85,7 +89,12 @@ export function normalizeGroundedTailoredResume(
     canonicalizedSectionTypes: 0,
     canonicalizedSectionOrders: 0,
     deduplicatedFactIdCount: 0,
-    sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+    changedSectionsCount: null,
+    maximumSourceFactIdsObserved: null,
+    changedSectionsLimit:
+      GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
+    sourceFactIdLimit:
+      GROUNDED_TAILORED_RESUME_LIMITS.sourceFactIdsMax,
   };
   if (!isRecord(value)) return { normalized: value, summary };
   assertAllowedKeys(value, GROUNDED_ROOT_KEYS);
@@ -128,6 +137,31 @@ export function normalizeGroundedTailoredResume(
     normalized = { ...normalized, applicationMaterials };
   }
 
+  if (Array.isArray(normalized.changedSections)) {
+    summary.changedSectionsCount = normalized.changedSections.length;
+  }
+  const sourceFactIdCounts: number[] = [];
+  const collectCounts = (claims: unknown) => {
+    if (!Array.isArray(claims)) return;
+    for (const claim of claims) {
+      if (isRecord(claim) && Array.isArray(claim.sourceFactIds)) {
+        sourceFactIdCounts.push(claim.sourceFactIds.length);
+      }
+    }
+  };
+  if (Array.isArray(normalized.sections)) {
+    for (const section of normalized.sections) {
+      if (isRecord(section)) collectCounts(section.lines);
+    }
+  }
+  if (isRecord(normalized.applicationMaterials)) {
+    for (const key of GROUNDED_APPLICATION_MATERIAL_KEYS) {
+      collectCounts(normalized.applicationMaterials[key]);
+    }
+  }
+  summary.maximumSourceFactIdsObserved =
+    sourceFactIdCounts.length > 0 ? Math.max(...sourceFactIdCounts) : null;
+
   summary.groundedNormalizationApplied =
     summary.defaultedApplicationMaterialArrays.length > 0 ||
     summary.canonicalizedSectionTypes > 0 ||
@@ -155,6 +189,9 @@ export function safeGroundedNormalizationMetadata(
     canonicalizedSectionTypeCount: summary.canonicalizedSectionTypes,
     canonicalizedSectionOrderCount: summary.canonicalizedSectionOrders,
     deduplicatedSourceFactIdCount: summary.deduplicatedFactIdCount,
+    changedSectionsCount: summary.changedSectionsCount,
+    maximumChangedSections: summary.changedSectionsLimit,
+    maximumSourceFactIdsObserved: summary.maximumSourceFactIdsObserved,
     sourceFactIdLimit: summary.sourceFactIdLimit,
   };
 }

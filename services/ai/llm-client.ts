@@ -22,6 +22,7 @@ import {
   safeGroundedNormalizationDiagnosticMetadata,
   type GroundedNormalizationDiagnosticSummary,
 } from "./grounded-normalization-diagnostics";
+import type { PipelineStageStatus } from "./pipeline-stage-status";
 
 export type LLMErrorCode =
   | "invalid_configuration"
@@ -162,6 +163,9 @@ export type LLMCompletionMetadata = {
   groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
   httpStatus?: number;
   jsonStatus?: "passed" | "failed";
+  normalizationStatus?: PipelineStageStatus;
+  schemaStatus?: PipelineStageStatus;
+  factualityStatus?: PipelineStageStatus;
   schemaValidationStatus?: "passed" | "failed" | "not_reached";
   responseSafetySummary: LLMResponseSafetySummary;
   estimatedCostMicros?: number;
@@ -475,6 +479,11 @@ export class LLMClient {
         groundedNormalizationSummary: latestGroundedNormalizationSummary,
         httpStatus,
         jsonStatus: "passed",
+        normalizationStatus: input.normalizeParsedJson
+          ? "passed"
+          : "not_reached",
+        schemaStatus: "passed",
+        factualityStatus: "not_reached",
         schemaValidationStatus: "passed",
         responseSafetySummary: latestResponseSummary!,
         estimatedCostMicros,
@@ -505,6 +514,11 @@ export class LLMClient {
           ...safeGroundedNormalizationMetadata(latestGroundedNormalizationSummary),
           httpStatus,
           jsonStatus: "passed",
+          normalizationStatus: input.normalizeParsedJson
+            ? "passed"
+            : "not_reached",
+          schemaStatus: "passed",
+          factualityStatus: "not_reached",
           schemaValidationStatus: "passed",
           ...responseMetadata(latestResponseSummary),
           priceCurrency: metadata.priceCurrency,
@@ -572,6 +586,29 @@ export class LLMClient {
                   normalized.code === "GROUNDED_NORMALIZATION_FAILED"
                 ? "passed"
                 : undefined,
+          normalizationStatus:
+            normalized.code === "GROUNDED_NORMALIZATION_FAILED"
+              ? "failed"
+              : normalized.code === "LLM_SCHEMA_VALIDATION_FAILED" &&
+                  input.normalizeParsedJson &&
+                  latestGroundedNormalizationSummary
+                ? "passed"
+                : normalized.code === "LLM_STRUCTURED_OUTPUT_INVALID"
+                  ? "not_reached"
+                  : undefined,
+          schemaStatus:
+            normalized.code === "LLM_SCHEMA_VALIDATION_FAILED"
+              ? "failed"
+              : normalized.code === "GROUNDED_NORMALIZATION_FAILED" ||
+                  normalized.code === "LLM_STRUCTURED_OUTPUT_INVALID"
+                ? "not_reached"
+                : undefined,
+          factualityStatus:
+            normalized.code === "LLM_SCHEMA_VALIDATION_FAILED" ||
+            normalized.code === "GROUNDED_NORMALIZATION_FAILED" ||
+            normalized.code === "LLM_STRUCTURED_OUTPUT_INVALID"
+              ? "not_reached"
+              : undefined,
           schemaValidationStatus:
             normalized.code === "LLM_SCHEMA_VALIDATION_FAILED"
               ? "failed"

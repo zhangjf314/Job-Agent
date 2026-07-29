@@ -93,17 +93,22 @@ strict Grounded Zod schema. The production output contract, topology
 diagnostics, and normalizer share one fixed section definition:
 `type,title,lines,order`. Section `type` and `order` are assigned from the fixed
 output position, and string-only `sourceFactIds` arrays are deduplicated in
-original order. The bounded source-ID limit is eight; every ID is still checked against
-the candidate fact registry, while unknown and `J_REQ_*` IDs fail the
-factuality gate. Unknown object fields are rejected rather than recursively
-coerced or passed through.
+original order. Shared Grounded limits require `changedSections` to contain at
+most two unique canonical section types representing only the most materially
+changed sections. Each `GroundedText.sourceFactIds` contains at most eight
+unique candidate `F_*` IDs and only the minimum sufficient evidence. A claim
+that needs more evidence must be split into independently understandable
+lines; evidence is never truncated. Every ID is still checked against the
+candidate fact registry, while unknown and `J_REQ_*` IDs fail the factuality
+gate. Unknown object fields are rejected rather than recursively coerced or
+passed through.
 
 The three application-material arrays remain required and non-empty because
 the unchanged public business schema requires non-empty strings. Missing,
 `null`, or wrongly typed material arrays are not synthesized or coerced and
-continue to fail schema validation. Safe observation stores only normalization
-counts, the fixed limit, and fixed schema paths—never generated text or fact-ID
-values.
+continue to fail schema validation. Safe observation stores only stage statuses,
+cardinality counts, fixed limits, and fixed schema paths—never generated text
+or fact-ID values.
 
 ## Local real-provider smoke test
 

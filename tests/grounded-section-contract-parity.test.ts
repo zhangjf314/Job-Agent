@@ -8,6 +8,7 @@ import {
   GROUNDED_SECTION_KEYS,
   GROUNDED_SECTION_TYPES_BY_POSITION,
   GROUNDED_SOURCE_FACT_ID_LIMIT,
+  GROUNDED_TAILORED_RESUME_LIMITS,
   GROUNDED_TEXT_KEYS,
 } from "@/services/ai/grounded-tailored-resume-contract";
 import {
@@ -84,11 +85,16 @@ describe("Grounded section contract parity", () => {
       applicationMaterialKeys: GROUNDED_APPLICATION_MATERIAL_KEYS,
       sectionTypesByPosition: GROUNDED_SECTION_TYPES_BY_POSITION,
       sectionCount: 6,
+      changedSectionsLimit: 2,
       sourceFactIdLimit: 8,
     });
     expect(GROUNDED_SECTION_KEYS).toEqual(expectedSectionKeys);
     expect(GROUNDED_SECTION_COUNT).toBe(6);
     expect(GROUNDED_SOURCE_FACT_ID_LIMIT).toBe(8);
+    expect(GROUNDED_TAILORED_RESUME_LIMITS).toEqual({
+      changedSectionsMax: 2,
+      sourceFactIdsMax: 8,
+    });
   });
 
   it("keeps contract, Grounded schemas, and normalizer keys aligned", () => {
@@ -140,13 +146,13 @@ describe("Grounded section contract parity", () => {
   it("builds one explicit production section contract with no old alias", () => {
     const sectionContract = buildGroundedSectionOutputContract();
     expect(sectionContract).toContain(
-      "each section object must contain exactly:type,title,lines,order;",
+      "each exactly {type,title,lines,order};",
     );
-    expect(sectionContract).toContain("sections:exactly 6 objects");
+    expect(sectionContract).toContain("sections:exactly 6");
     expect(sectionContract).toContain(
       "fixed order summary,skills,projects,experiences,education,others",
     );
-    expect(sectionContract).toContain("Do not rename lines");
+    expect(sectionContract).toContain("no aliases/extra fields");
     expect(sectionContract).not.toContain("items:{");
     expect(sectionContract).not.toContain("sections:4..6");
     expect(
