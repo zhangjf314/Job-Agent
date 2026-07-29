@@ -239,9 +239,7 @@ async function main() {
           errorCategory: error instanceof LLMClientError
             ? error.code
             : error instanceof TailoredResumeFactualityError
-              ? factualityDiagnostics?.factualityRepairCount
-                ? "FACTUALITY_REPAIR_FAILED"
-                : "TAILORED_RESUME_FACTUALITY_VIOLATION"
+              ? error.code
             : error instanceof Error ? error.name : "provider_error",
           diagnostics: factualityDiagnostics,
           factualityViolationCategories: report?.violations
@@ -360,6 +358,24 @@ async function main() {
         (summary.diagnostics || summary.success ? 0 : undefined),
       factualityStatus: pipelineStages?.factualityStatus,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,
+      factualityViolationCountBeforeRepair:
+        summary.diagnostics?.factualityViolationCountBeforeRepair,
+      factualityRepairTargetCount:
+        summary.diagnostics?.factualityRepairTargetCount,
+      factualityRepairPatchCount:
+        summary.diagnostics?.factualityRepairPatchCount,
+      factualityRepairApplied:
+        summary.diagnostics?.factualityRepairApplied,
+      factualityViolationCountAfterRepair:
+        summary.diagnostics?.factualityViolationCountAfterRepair,
+      factualityViolationsResolved:
+        summary.diagnostics?.factualityViolationsResolved,
+      factualityViolationsIntroduced:
+        summary.diagnostics?.factualityViolationsIntroduced,
+      factualityRepairRemainingCategories:
+        summary.diagnostics?.factualityRepairRemainingCategories,
+      factualityRepairScopeViolation:
+        summary.diagnostics?.factualityRepairScopeViolation,
       groundedClaimCount: summary.diagnostics?.groundedClaimCount,
       ungroundedClaimCount: summary.diagnostics?.ungroundedClaimCount,
       unknownFactIds: summary.diagnostics?.unknownFactIds,

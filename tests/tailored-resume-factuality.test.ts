@@ -332,15 +332,24 @@ describe("factuality repair and safety", () => {
       sourceFactIds: [factId(facts, "TypeScript")],
       kind: "fact",
     });
-    const safe = grounded({
-      text: "具备 TypeScript 基础",
-      sourceFactIds: [factId(facts, "TypeScript")],
-      kind: "fact",
-    });
     const fakeClient = {
       structuredCompletion: vi.fn()
         .mockResolvedValueOnce({ data: unsafe, metadata: metadata(), usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } })
-        .mockResolvedValueOnce({ data: safe, metadata: metadata(), usage: { prompt_tokens: 11, completion_tokens: 21, total_tokens: 32 } }),
+        .mockResolvedValueOnce({
+          data: {
+            repairs: [{
+              targetId: "T1",
+              action: "replace",
+              replacement: {
+                text: "具备 TypeScript 基础",
+                sourceFactIds: [factId(facts, "TypeScript")],
+                kind: "fact",
+              },
+            }],
+          },
+          metadata: metadata(),
+          usage: { prompt_tokens: 11, completion_tokens: 21, total_tokens: 32 },
+        }),
       recordSafeObservation: vi.fn(),
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
@@ -353,7 +362,11 @@ describe("factuality repair and safety", () => {
     expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[0][0])
       .toMatchObject({ normalizeParsedJson: expect.any(Function) });
     expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[1][0])
-      .toMatchObject({ normalizeParsedJson: expect.any(Function) });
+      .toMatchObject({
+        schemaName: "grounded_text_factuality_repair_patch",
+        allowJsonRepair: false,
+        allowFinalizationRetry: false,
+      });
     expect(
       JSON.stringify(
         vi.mocked(fakeClient.structuredCompletion).mock.calls[1][0].messages,
@@ -368,6 +381,13 @@ describe("factuality repair and safety", () => {
         canonicalizedSectionOrderCount: 0,
         deduplicatedSourceFactIdCount: 0,
         sourceFactIdLimit: 8,
+        factualityViolationCountBeforeRepair: expect.any(Number),
+        factualityRepairTargetCount: 1,
+        factualityRepairPatchCount: 1,
+        factualityRepairApplied: true,
+        factualityViolationCountAfterRepair: 0,
+        factualityViolationsIntroduced: 0,
+        factualityRepairScopeViolation: false,
       });
     const recorded = JSON.stringify(vi.mocked(fakeClient.recordSafeObservation).mock.calls);
     expect(recorded).not.toContain("完成 OpenAI-compatible");
@@ -384,7 +404,22 @@ describe("factuality repair and safety", () => {
     });
     const fakeClient = {
       structuredCompletion: vi.fn()
-        .mockResolvedValue({ data: unsafe, metadata: metadata(), usage: {} }),
+        .mockResolvedValueOnce({ data: unsafe, metadata: metadata(), usage: {} })
+        .mockResolvedValueOnce({
+          data: {
+            repairs: [{
+              targetId: "T1",
+              action: "replace",
+              replacement: {
+                text: "开发过 AI 应用项目",
+                sourceFactIds: [factId(facts, "TypeScript")],
+                kind: "fact",
+              },
+            }],
+          },
+          metadata: metadata(),
+          usage: {},
+        }),
       recordSafeObservation: vi.fn(),
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
