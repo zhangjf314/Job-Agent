@@ -268,10 +268,6 @@ async function main() {
             error instanceof LLMClientError
               ? error.groundedNormalizationDiagnosticSummary
               : undefined,
-          additionalRepairBlockedByRequestLimit:
-            explicitMaxExternalRequests !== undefined &&
-            error instanceof LLMClientError &&
-            error.code === "LLM_SCHEMA_VALIDATION_FAILED",
           httpStatus: error instanceof LLMClientError ? error.httpStatus : undefined,
         });
         throw error;
@@ -377,16 +373,23 @@ async function main() {
       factualityRepairScopeViolation:
         summary.diagnostics?.factualityRepairScopeViolation,
       repairHttpStatus: summary.diagnostics?.repairHttpStatus,
-      repairJsonStatus: summary.diagnostics?.repairJsonStatus,
-      repairEnvelopeStatus: summary.diagnostics?.repairEnvelopeStatus,
+      repairJsonStatus: summary.diagnostics?.repairJsonStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
+      repairEnvelopeStatus: summary.diagnostics?.repairEnvelopeStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
       repairTargetCoverageStatus:
-        summary.diagnostics?.repairTargetCoverageStatus,
+        summary.diagnostics?.repairTargetCoverageStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
       repairPatchStructureStatus:
-        summary.diagnostics?.repairPatchStructureStatus,
+        summary.diagnostics?.repairPatchStructureStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
       repairPatchSemanticStatus:
-        summary.diagnostics?.repairPatchSemanticStatus,
-      repairScopeStatus: summary.diagnostics?.repairScopeStatus,
-      repairApplyStatus: summary.diagnostics?.repairApplyStatus,
+        summary.diagnostics?.repairPatchSemanticStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
+      repairScopeStatus: summary.diagnostics?.repairScopeStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
+      repairApplyStatus: summary.diagnostics?.repairApplyStatus ??
+        (summary.name === "Tailored resume" ? "not_reached" : undefined),
       postRepairSchemaStatus:
         summary.diagnostics?.postRepairSchemaStatus,
       postRepairFactualityStatus:
@@ -469,7 +472,30 @@ async function main() {
           : summary.diagnostics || summary.success
             ? {}
             : undefined,
-      sectionCount: summary.sectionCount,
+      sectionCount:
+        summary.sectionCount ??
+        summary.diagnostics?.sectionCount ??
+        summary.groundedNormalizationSummary?.sectionCount,
+      sectionLinesLimit:
+        summary.diagnostics?.sectionLinesLimit ??
+        summary.groundedNormalizationSummary?.sectionLinesLimit,
+      sectionLineCounts:
+        summary.diagnostics?.sectionLineCounts ??
+        summary.groundedNormalizationSummary?.sectionLineCounts,
+      maximumSectionLinesObserved:
+        summary.diagnostics?.maximumSectionLinesObserved ??
+        summary.groundedNormalizationSummary?.maximumSectionLinesObserved,
+      sectionLineCardinalityViolationCount:
+        summary.diagnostics?.sectionLineCardinalityViolationCount ??
+        summary.groundedNormalizationSummary
+          ?.sectionLineCardinalityViolationCount,
+      sectionLineCardinalityViolationPaths:
+        summary.diagnostics?.sectionLineCardinalityViolationPaths ??
+        summary.groundedNormalizationSummary
+          ?.sectionLineCardinalityViolationPaths,
+      skillsSectionLineCount:
+        summary.diagnostics?.skillsSectionLineCount ??
+        summary.groundedNormalizationSummary?.skillsSectionLineCount,
       sectionsWithUnknownKeys:
         summary.groundedNormalizationDiagnosticSummary?.issues.filter(
           (issue) =>

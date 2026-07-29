@@ -22,7 +22,9 @@ export const groundedTextSchema = z.object({
 export const groundedSectionSchema = z.object({
     type: z.enum(GROUNDED_SECTION_TYPES_BY_POSITION),
     title: z.string().trim().min(1),
-    lines: z.array(groundedTextSchema).max(2),
+    lines: z.array(groundedTextSchema)
+      .min(GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMin)
+      .max(GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMax),
     order: z.number().int().min(0),
   }).strict();
 
@@ -104,8 +106,8 @@ export const groundedTailoredResumeOutputContract = [
   "GroundedText:{text:max80 Chinese chars,sourceFactIds,kind:fact|goal|format}.",
   buildGroundedArrayCardinalityOutputContract(),
   buildRewriteExplanationOutputContract(),
-  "Every factual line uses kind=fact and supplied candidate evidence.",
+  "Factual lines use kind=fact and supplied candidate evidence.",
   "kind=goal must state target/plan/hope/learning/future; kind=format is only heading/label.",
-  "missingFields,improvementQuestions,qualityWarnings:0..2 short strings. applicationMaterials require selfIntroduction,applicationEmail,recruiterMessage, each 1..2 GroundedText.",
-  "JSON only; <=1600 tokens.",
+  "missingFields,improvementQuestions,qualityWarnings:0..2 strings;applicationMaterials require selfIntroduction,applicationEmail,recruiterMessage, each 1..2 GroundedText.",
+  "JSON only;<=1600 tokens.",
 ].join(" ");

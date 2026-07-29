@@ -30,6 +30,13 @@ export type GroundedNormalizationSummary = {
   maximumSourceFactIdsObserved: number | null;
   changedSectionsLimit: number;
   sourceFactIdLimit: number;
+  sectionCount: number | null;
+  sectionLinesLimit: number;
+  sectionLineCounts: number[];
+  maximumSectionLinesObserved: number | null;
+  sectionLineCardinalityViolationCount: number;
+  sectionLineCardinalityViolationPaths: string[];
+  skillsSectionLineCount: number | null;
 };
 
 export type GroundedNormalizationResult = {
@@ -104,6 +111,14 @@ export function normalizeGroundedTailoredResume(
       GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
     sourceFactIdLimit:
       GROUNDED_TAILORED_RESUME_LIMITS.sourceFactIdsMax,
+    sectionCount: null,
+    sectionLinesLimit:
+      GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMax,
+    sectionLineCounts: [],
+    maximumSectionLinesObserved: null,
+    sectionLineCardinalityViolationCount: 0,
+    sectionLineCardinalityViolationPaths: [],
+    skillsSectionLineCount: null,
   };
   if (!isRecord(value)) return { normalized: value, summary };
   assertAllowedKeys(value, GROUNDED_ROOT_KEYS);
@@ -116,6 +131,7 @@ export function normalizeGroundedTailoredResume(
   }
 
   if (Array.isArray(value.sections)) {
+    summary.sectionCount = value.sections.length;
     const sections = value.sections.map((section, index) => {
       if (!isRecord(section)) return section;
       assertAllowedKeys(section, GROUNDED_SECTION_KEYS);
@@ -132,6 +148,29 @@ export function normalizeGroundedTailoredResume(
       };
     });
     normalized = { ...normalized, sections };
+  }
+
+  if (Array.isArray(normalized.sections)) {
+    normalized.sections.forEach((section, index) => {
+      if (!isRecord(section) || !Array.isArray(section.lines)) return;
+      const count = section.lines.length;
+      summary.sectionLineCounts.push(count);
+      if (index === 1) summary.skillsSectionLineCount = count;
+      if (
+        count < GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMin ||
+        count > GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMax
+      ) {
+        summary.sectionLineCardinalityViolationPaths.push(
+          `sections[${index}].lines`,
+        );
+      }
+    });
+    summary.maximumSectionLinesObserved =
+      summary.sectionLineCounts.length > 0
+        ? Math.max(...summary.sectionLineCounts)
+        : null;
+    summary.sectionLineCardinalityViolationCount =
+      summary.sectionLineCardinalityViolationPaths.length;
   }
 
   if (isRecord(value.applicationMaterials)) {
@@ -211,5 +250,14 @@ export function safeGroundedNormalizationMetadata(
     maximumChangedSections: summary.changedSectionsLimit,
     maximumSourceFactIdsObserved: summary.maximumSourceFactIdsObserved,
     sourceFactIdLimit: summary.sourceFactIdLimit,
+    sectionCount: summary.sectionCount,
+    sectionLinesLimit: summary.sectionLinesLimit,
+    sectionLineCounts: summary.sectionLineCounts,
+    maximumSectionLinesObserved: summary.maximumSectionLinesObserved,
+    sectionLineCardinalityViolationCount:
+      summary.sectionLineCardinalityViolationCount,
+    sectionLineCardinalityViolationPaths:
+      summary.sectionLineCardinalityViolationPaths,
+    skillsSectionLineCount: summary.skillsSectionLineCount,
   };
 }

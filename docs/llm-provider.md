@@ -93,15 +93,22 @@ strict Grounded Zod schema. The production output contract, topology
 diagnostics, and normalizer share one fixed section definition:
 `type,title,lines,order`. Section `type` and `order` are assigned from the fixed
 output position, and string-only `sourceFactIds` arrays are deduplicated in
-original order. Shared Grounded limits require `changedSections` to contain at
-most two unique canonical section types representing only the most materially
-changed sections. Each `GroundedText.sourceFactIds` contains at most eight
-unique candidate `F_*` IDs and only the minimum sufficient evidence. A claim
-that needs more evidence must be split into independently understandable
-lines; evidence is never truncated. Every ID is still checked against the
-candidate fact registry, while unknown and `J_REQ_*` IDs fail the factuality
-gate. Unknown object fields are rejected rather than recursively coerced or
-passed through.
+original order. All six canonical sections share strict
+`sectionLinesMin=0` and `sectionLinesMax=2` limits. Lines are selective resume
+display statements, not an exhaustive copy of the candidate fact registry.
+Skills are grouped into at most two complete, JD-relevant, fact-supported
+statements instead of one line per skill. Unselected facts remain in the
+registry. The normalizer, converter, writer, and save path never truncate or
+merge over-limit lines.
+
+Shared Grounded limits also require `changedSections` to contain at most two
+unique canonical section types representing only the most materially changed
+sections. Each `GroundedText.sourceFactIds` contains at most eight unique
+candidate `F_*` IDs and only the minimum sufficient evidence. A line may
+combine multiple related facts while remaining complete and independently
+verifiable. Every ID is still checked against the candidate fact registry,
+while unknown and `J_REQ_*` IDs fail the factuality gate. Unknown object fields
+are rejected rather than recursively coerced or passed through.
 
 `rewriteExplanation` is a strict JSON string array with zero to two concise,
 non-empty items. A single string, `null`, an object, or more than two items
@@ -115,6 +122,13 @@ the unchanged public business schema requires non-empty strings. Missing,
 continue to fail schema validation. Safe observation stores only stage statuses,
 cardinality counts, fixed limits, and fixed schema paths—never generated text
 or fact-ID values.
+
+Section-line observation stores only `sectionCount`, the shared limit, six
+numeric line counts when available, the maximum observed count, the
+skills-section count, and fixed paths such as `sections[1].lines`. A sole
+overflow is safely classified as `SECTION_LINES_CARDINALITY_VIOLATION` under
+the unchanged `LLM_SCHEMA_VALIDATION_FAILED` error. Section titles, line text,
+fact-ID values, and raw responses are never observed.
 
 If the deterministic factuality gate rejects an otherwise valid Grounded
 result, violations are grouped by their fixed `GroundedText` path into stable

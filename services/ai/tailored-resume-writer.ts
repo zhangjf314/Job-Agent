@@ -107,6 +107,13 @@ export type TailoredResumeDiagnostics = {
   maximumChangedSections: number;
   maximumSourceFactIdsObserved: number | null;
   sourceFactIdLimit: number;
+  sectionCount: number | null;
+  sectionLinesLimit: number;
+  sectionLineCounts: number[];
+  maximumSectionLinesObserved: number | null;
+  sectionLineCardinalityViolationCount: number;
+  sectionLineCardinalityViolationPaths: string[];
+  skillsSectionLineCount: number | null;
   factualityViolationCountBeforeRepair: number;
   factualityRepairTargetCount: number;
   factualityRepairPatchCount: number;
@@ -170,6 +177,14 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
           GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
         maximumSourceFactIdsObserved: 0,
         sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+        sectionCount: 0,
+        sectionLinesLimit:
+          GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMax,
+        sectionLineCounts: [],
+        maximumSectionLinesObserved: 0,
+        sectionLineCardinalityViolationCount: 0,
+        sectionLineCardinalityViolationPaths: [],
+        skillsSectionLineCount: null,
         factualityViolationCountBeforeRepair: 0,
         factualityRepairTargetCount: 0,
         factualityRepairPatchCount: 0,
@@ -366,6 +381,25 @@ function diagnostics(
         ?.maximumSourceFactIdsObserved ??
       null,
     sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+    sectionCount:
+      initial.metadata.groundedNormalizationSummary?.sectionCount ?? null,
+    sectionLinesLimit:
+      initial.metadata.groundedNormalizationSummary?.sectionLinesLimit ??
+      GROUNDED_TAILORED_RESUME_LIMITS.sectionLinesMax,
+    sectionLineCounts:
+      initial.metadata.groundedNormalizationSummary?.sectionLineCounts ?? [],
+    maximumSectionLinesObserved:
+      initial.metadata.groundedNormalizationSummary
+        ?.maximumSectionLinesObserved ?? null,
+    sectionLineCardinalityViolationCount:
+      initial.metadata.groundedNormalizationSummary
+        ?.sectionLineCardinalityViolationCount ?? 0,
+    sectionLineCardinalityViolationPaths:
+      initial.metadata.groundedNormalizationSummary
+        ?.sectionLineCardinalityViolationPaths ?? [],
+    skillsSectionLineCount:
+      initial.metadata.groundedNormalizationSummary
+        ?.skillsSectionLineCount ?? null,
     ...repairSummary,
     ...repairDiagnostics,
     httpStatus: repaired?.metadata.httpStatus ?? initial.metadata.httpStatus,
@@ -624,6 +658,17 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           maximumSourceFactIdsObserved:
             finalDiagnostics.maximumSourceFactIdsObserved,
           sourceFactIdLimit: finalDiagnostics.sourceFactIdLimit,
+          sectionCount: finalDiagnostics.sectionCount,
+          sectionLinesLimit: finalDiagnostics.sectionLinesLimit,
+          sectionLineCounts: finalDiagnostics.sectionLineCounts,
+          maximumSectionLinesObserved:
+            finalDiagnostics.maximumSectionLinesObserved,
+          sectionLineCardinalityViolationCount:
+            finalDiagnostics.sectionLineCardinalityViolationCount,
+          sectionLineCardinalityViolationPaths:
+            finalDiagnostics.sectionLineCardinalityViolationPaths,
+          skillsSectionLineCount:
+            finalDiagnostics.skillsSectionLineCount,
           factualityViolationCountBeforeRepair:
             finalDiagnostics.factualityViolationCountBeforeRepair,
           factualityRepairTargetCount:
