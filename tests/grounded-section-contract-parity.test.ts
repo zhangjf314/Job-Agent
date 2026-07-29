@@ -32,7 +32,7 @@ import {
 } from "@/services/ai/candidate-fact-registry";
 import {
   buildGroundedTailoredResumeMessages,
-  LLMTailoredResumeWriterProvider,
+  LegacyFullGroundedTailoredResumeWriterProvider,
 } from "@/services/ai/tailored-resume-writer";
 import {
   buildStructuredOutputInstruction,
@@ -309,7 +309,7 @@ describe("Grounded section contract parity", () => {
       }),
       recordSafeObservation: vi.fn(),
     } as unknown as LLMClient;
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient);
     await provider.write({
       profile: fictionalSmokeProfile,
       baseResumeMarkdown: fictionalSmokeBaseResume,

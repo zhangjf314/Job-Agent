@@ -28,7 +28,7 @@ import type {
   LLMCallObserver,
 } from "@/services/ai/llm-observability";
 import {
-  LLMTailoredResumeWriterProvider,
+  LegacyFullGroundedTailoredResumeWriterProvider,
 } from "@/services/ai/tailored-resume-writer";
 import { getAIConfig } from "@/lib/ai-config";
 import {
@@ -222,7 +222,7 @@ describe("rewriteExplanation strict contract", () => {
         }),
       recordSafeObservation: vi.fn(),
     } as unknown as LLMClient;
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient);
 
     await expect(provider.write({
       profile: fictionalSmokeProfile,

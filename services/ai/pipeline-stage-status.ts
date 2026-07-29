@@ -1,6 +1,10 @@
 export type PipelineStageStatus = "not_reached" | "passed" | "failed";
 
 export type TailoredResumePipelineStageStatuses = {
+  planJsonStatus: PipelineStageStatus;
+  planSchemaStatus: PipelineStageStatus;
+  planValidationStatus: PipelineStageStatus;
+  compilerStatus: PipelineStageStatus;
   jsonStatus: PipelineStageStatus;
   normalizationStatus: PipelineStageStatus;
   schemaStatus: PipelineStageStatus;
@@ -19,6 +23,10 @@ export function tailoredResumePipelineStageStatuses(
 ): TailoredResumePipelineStageStatuses {
   if (input.success) {
     return {
+      planJsonStatus: "passed",
+      planSchemaStatus: "passed",
+      planValidationStatus: "passed",
+      compilerStatus: "passed",
       jsonStatus: "passed",
       normalizationStatus: "passed",
       schemaStatus: "passed",
@@ -27,6 +35,10 @@ export function tailoredResumePipelineStageStatuses(
   }
   if (input.factualityStatus) {
     return {
+      planJsonStatus: "passed",
+      planSchemaStatus: "passed",
+      planValidationStatus: "passed",
+      compilerStatus: "passed",
       jsonStatus: "passed",
       normalizationStatus: "passed",
       schemaStatus: "passed",
@@ -36,16 +48,22 @@ export function tailoredResumePipelineStageStatuses(
   }
   if (input.errorCategory === "LLM_SCHEMA_VALIDATION_FAILED") {
     return {
-      jsonStatus: "passed",
-      normalizationStatus: input.normalizationSummaryPresent
-        ? "passed"
-        : "not_reached",
-      schemaStatus: "failed",
+      planJsonStatus: "passed",
+      planSchemaStatus: "failed",
+      planValidationStatus: "not_reached",
+      compilerStatus: "not_reached",
+      jsonStatus: "not_reached",
+      normalizationStatus: "not_reached",
+      schemaStatus: "not_reached",
       factualityStatus: "not_reached",
     };
   }
   if (input.errorCategory === "GROUNDED_NORMALIZATION_FAILED") {
     return {
+      planJsonStatus: "passed",
+      planSchemaStatus: "passed",
+      planValidationStatus: "passed",
+      compilerStatus: "failed",
       jsonStatus: "passed",
       normalizationStatus: "failed",
       schemaStatus: "not_reached",
@@ -54,13 +72,51 @@ export function tailoredResumePipelineStageStatuses(
   }
   if (input.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID") {
     return {
-      jsonStatus: "failed",
+      planJsonStatus: "failed",
+      planSchemaStatus: "not_reached",
+      planValidationStatus: "not_reached",
+      compilerStatus: "not_reached",
+      jsonStatus: "not_reached",
+      normalizationStatus: "not_reached",
+      schemaStatus: "not_reached",
+      factualityStatus: "not_reached",
+    };
+  }
+  if (input.errorCategory?.startsWith("TAILORED_PLAN_")) {
+    return {
+      planJsonStatus: "passed",
+      planSchemaStatus:
+        input.errorCategory === "TAILORED_PLAN_SCHEMA_INVALID"
+          ? "failed"
+          : "passed",
+      planValidationStatus:
+        input.errorCategory === "TAILORED_PLAN_SCHEMA_INVALID"
+          ? "not_reached"
+          : "failed",
+      compilerStatus: "not_reached",
+      jsonStatus: "not_reached",
+      normalizationStatus: "not_reached",
+      schemaStatus: "not_reached",
+      factualityStatus: "not_reached",
+    };
+  }
+  if (input.errorCategory?.startsWith("DETERMINISTIC_COMPILER_")) {
+    return {
+      planJsonStatus: "passed",
+      planSchemaStatus: "passed",
+      planValidationStatus: "passed",
+      compilerStatus: "failed",
+      jsonStatus: "not_reached",
       normalizationStatus: "not_reached",
       schemaStatus: "not_reached",
       factualityStatus: "not_reached",
     };
   }
   return {
+    planJsonStatus: "not_reached",
+    planSchemaStatus: "not_reached",
+    planValidationStatus: "not_reached",
+    compilerStatus: "not_reached",
     jsonStatus: "not_reached",
     normalizationStatus: "not_reached",
     schemaStatus: "not_reached",
