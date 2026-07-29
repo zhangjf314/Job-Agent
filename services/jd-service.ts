@@ -201,11 +201,12 @@ export async function generateTailoredResume(
       resumeRewriteSuggestions: analysisResult.resumeRewriteSuggestions,
     },
   });
-  const tailored = await createTailoredResumeWriterProvider().write({
+  const tailoredOutput = await createTailoredResumeWriterProvider().write({
     profile,
     baseResumeMarkdown: baseResume.contentMarkdown,
     jdAnalysis: analysisResult,
   });
+  const tailored = tailoredOutput.result;
   const date = new Date().toISOString().slice(0, 10);
   const resume = await createResume(
     {
