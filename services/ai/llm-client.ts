@@ -17,9 +17,47 @@ export type LLMErrorCode =
   | "timeout"
   | "network_error"
   | "provider_error"
-  | "structured_output_invalid";
+  | "LLM_CHOICES_MISSING"
+  | "LLM_MESSAGE_MISSING"
+  | "LLM_EMPTY_FINAL_CONTENT"
+  | "LLM_EMPTY_FINAL_CONTENT_AFTER_REASONING"
+  | "LLM_OUTPUT_LIMIT_REACHED_WITHOUT_FINAL_CONTENT"
+  | "LLM_FINALIZATION_RETRY_FAILED"
+  | "LLM_STRUCTURED_OUTPUT_INVALID"
+  | "LLM_SCHEMA_VALIDATION_FAILED"
+  | "SMOKE_EXTERNAL_REQUEST_LIMIT_REACHED";
+
+type Usage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+};
+
+export type LLMResponseSafetySummary = {
+  responseId: string | null;
+  choiceCount: number;
+  firstChoicePresent: boolean;
+  messagePresent: boolean;
+  contentState: "missing" | "null" | "empty" | "whitespace" | "present";
+  contentCharacterLength: number | null;
+  contentByteLength: number | null;
+  finishReason: string | null;
+  reasoningFieldPresent: boolean;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  outputLimitReached: boolean | null;
+};
 
 export class LLMClientError extends Error {
+  public responseSummary?: LLMResponseSafetySummary;
+  public usage?: Usage;
+  public retryCount = 0;
+  public repairCount = 0;
+  public finalizationRetryCount = 0;
+  public externalRequestCount = 0;
+  public latencyMs?: number;
+
   constructor(
     public readonly code: LLMErrorCode,
     message: string,
@@ -27,9 +65,15 @@ export class LLMClientError extends Error {
     public readonly httpStatus?: number,
     public readonly requestId?: string,
     public requestAttempts = 0,
+    details?: {
+      responseSummary?: LLMResponseSafetySummary;
+      usage?: Usage;
+    },
   ) {
     super(message);
     this.name = "LLMClientError";
+    this.responseSummary = details?.responseSummary;
+    this.usage = details?.usage;
   }
 }
 
@@ -46,16 +90,20 @@ export type StructuredCompletionInput<T> = {
   temperature?: number;
   maxOutputTokens?: number;
   outputContract?: string;
-};
-
-type Usage = {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
+  finalizationRetryMessages?: ChatMessage[];
+  allowFinalizationRetry?: boolean;
+  allowJsonRepair?: boolean;
+  allowTransportRetry?: boolean;
 };
 
 type CompletionResponse = {
-  choices?: Array<{ message?: { content?: string; reasoning_content?: unknown } }>;
+  choices?: Array<{
+    finish_reason?: string | null;
+    message?: {
+      content?: string | null;
+      reasoning_content?: unknown;
+    } | null;
+  }> | null;
   usage?: Usage;
   model?: string;
   id?: string;
@@ -67,8 +115,10 @@ export type LLMCompletionMetadata = {
   latencyMs: number;
   retryCount: number;
   repairCount: number;
+  finalizationRetryCount: number;
   externalRequestCount: number;
   reasoningFieldPresent: boolean;
+  responseSafetySummary: LLMResponseSafetySummary;
   estimatedCostMicros?: number;
   priceCurrency?: string;
 };
@@ -81,6 +131,7 @@ type RequestResult = {
   retryCount: number;
   httpStatus: number;
   reasoningFieldPresent: boolean;
+  responseSafetySummary: LLMResponseSafetySummary;
 };
 
 type ClientRuntime = {
@@ -105,10 +156,69 @@ function parseStrictJson(text: string) {
     return JSON.parse(candidate);
   } catch {
     throw new LLMClientError(
-      "structured_output_invalid",
+      "LLM_STRUCTURED_OUTPUT_INVALID",
       "LLM response was not a complete JSON value.",
     );
   }
+}
+
+function contentState(message?: {
+  content?: string | null;
+  reasoning_content?: unknown;
+} | null): LLMResponseSafetySummary["contentState"] {
+  if (!message || !Object.prototype.hasOwnProperty.call(message, "content")) return "missing";
+  if (message.content === null) return "null";
+  if (message.content === "") return "empty";
+  if (typeof message.content === "string" && !message.content.trim()) return "whitespace";
+  return typeof message.content === "string" ? "present" : "missing";
+}
+
+function responseSafetySummary(
+  response: CompletionResponse,
+  maxOutputTokens: number,
+): LLMResponseSafetySummary {
+  const firstChoice = response.choices?.[0];
+  const message = firstChoice?.message;
+  const state = contentState(message);
+  const content = typeof message?.content === "string" ? message.content : null;
+  const finishReason = typeof firstChoice?.finish_reason === "string"
+    ? firstChoice.finish_reason
+    : null;
+  const completionTokens = response.usage?.completion_tokens ?? null;
+  const outputLimitReached = finishReason === "length" ||
+      completionTokens === maxOutputTokens
+    ? true
+    : finishReason !== null && finishReason !== "length" &&
+        completionTokens !== null && completionTokens < maxOutputTokens
+      ? false
+      : null;
+  return {
+    responseId: typeof response.id === "string" ? response.id : null,
+    choiceCount: Array.isArray(response.choices) ? response.choices.length : 0,
+    firstChoicePresent: firstChoice !== undefined,
+    messagePresent: message != null,
+    contentState: state,
+    contentCharacterLength: content === null ? null : Array.from(content).length,
+    contentByteLength: content === null ? null : new TextEncoder().encode(content).length,
+    finishReason,
+    reasoningFieldPresent: Object.prototype.hasOwnProperty.call(message ?? {}, "reasoning_content"),
+    promptTokens: response.usage?.prompt_tokens ?? null,
+    completionTokens,
+    totalTokens: response.usage?.total_tokens ?? null,
+    outputLimitReached,
+  };
+}
+
+function responseMetadata(summary?: LLMResponseSafetySummary) {
+  return summary ? { ...summary } : {};
+}
+
+function isFinalContentError(error: LLMClientError) {
+  return [
+    "LLM_EMPTY_FINAL_CONTENT",
+    "LLM_EMPTY_FINAL_CONTENT_AFTER_REASONING",
+    "LLM_OUTPUT_LIMIT_REACHED_WITHOUT_FINAL_CONTENT",
+  ].includes(error.code);
 }
 
 function validationSummary(error: z.ZodError) {
@@ -172,31 +282,79 @@ export class LLMClient {
     let usage: Usage | undefined;
     let retryCount = 0;
     let repairCount = 0;
+    let finalizationRetryCount = 0;
     let externalRequestCount = 0;
     let providerRequestId: string | undefined;
     let httpStatus: number | undefined;
     let reasoningFieldPresent = false;
+    let latestResponseSummary: LLMResponseSafetySummary | undefined;
 
     try {
-      const initial = await this.requestWithRetries(input.messages, input);
+      let initial: RequestResult;
+      try {
+        initial = await this.requestWithRetries(input.messages, input);
+      } catch (error) {
+        const emptyError = this.normalizeError(error);
+        latestResponseSummary = emptyError.responseSummary;
+        reasoningFieldPresent ||= emptyError.responseSummary?.reasoningFieldPresent ?? false;
+        providerRequestId = emptyError.requestId;
+        httpStatus = emptyError.httpStatus;
+        if (
+          input.allowFinalizationRetry !== false &&
+          input.finalizationRetryMessages &&
+          isFinalContentError(emptyError)
+        ) {
+          usage = addUsage(usage, emptyError.usage);
+          externalRequestCount += emptyError.requestAttempts;
+          retryCount += Math.max(0, emptyError.requestAttempts - 1);
+          finalizationRetryCount = 1;
+          try {
+            initial = await this.requestWithRetries(input.finalizationRetryMessages, {
+              ...input,
+              allowFinalizationRetry: false,
+            });
+          } catch (retryError) {
+            const finalError = this.normalizeError(retryError);
+            latestResponseSummary = finalError.responseSummary ?? latestResponseSummary;
+            reasoningFieldPresent ||=
+              finalError.responseSummary?.reasoningFieldPresent ?? false;
+            if (!isFinalContentError(finalError)) throw finalError;
+            usage = addUsage(usage, finalError.usage);
+            externalRequestCount += finalError.requestAttempts;
+            retryCount += Math.max(0, finalError.requestAttempts - 1);
+            throw new LLMClientError(
+              "LLM_FINALIZATION_RETRY_FAILED",
+              "LLM finalization retry did not return usable final content.",
+              false,
+              finalError.httpStatus,
+              finalError.requestId,
+              0,
+              {
+                responseSummary: latestResponseSummary,
+              },
+            );
+          }
+        } else {
+          throw emptyError;
+        }
+      }
       externalRequestCount += initial.retryCount + 1;
       retryCount += initial.retryCount;
       usage = addUsage(usage, initial.usage);
       providerRequestId = initial.requestId;
       httpStatus = initial.httpStatus;
       reasoningFieldPresent ||= initial.reasoningFieldPresent;
+      latestResponseSummary = initial.responseSafetySummary;
 
       let parsed = this.validateContent(initial.content, input.schema);
-      if (!parsed.success) {
+      if (!parsed.success && input.allowJsonRepair !== false) {
         repairCount = 1;
         const repair = await this.requestWithRetries(
           [
             {
               role: "system",
-              content: [
+              content:
                 `Repair the JSON so it matches schema "${input.schemaName}". Return only the corrected JSON value.`,
-                input.outputContract ? `Required output contract: ${input.outputContract}` : "",
-              ].filter(Boolean).join("\n"),
             },
             {
               role: "user",
@@ -211,16 +369,19 @@ export class LLMClient {
         providerRequestId = repair.requestId ?? providerRequestId;
         httpStatus = repair.httpStatus;
         reasoningFieldPresent ||= repair.reasoningFieldPresent;
+        latestResponseSummary = repair.responseSafetySummary;
         parsed = this.validateContent(repair.content, input.schema);
       }
 
       if (!parsed.success) {
         throw new LLMClientError(
-          "structured_output_invalid",
+          parsed.code,
           `LLM structured output remained invalid after one repair attempt: ${parsed.problem}`,
           false,
           httpStatus,
           providerRequestId,
+          0,
+          { responseSummary: latestResponseSummary },
         );
       }
 
@@ -232,8 +393,10 @@ export class LLMClient {
         latencyMs: durationMs,
         retryCount,
         repairCount,
+        finalizationRetryCount,
         externalRequestCount,
         reasoningFieldPresent,
+        responseSafetySummary: latestResponseSummary!,
         estimatedCostMicros,
         priceCurrency: estimatedCostMicros === undefined ? undefined : this.config.priceCurrency,
       };
@@ -255,9 +418,11 @@ export class LLMClient {
           providerRequestId,
           retryCount,
           repairCount,
+          finalizationRetryCount,
           externalRequestCount,
           reasoningFieldPresent,
           httpStatus,
+          ...responseMetadata(latestResponseSummary),
           priceCurrency: metadata.priceCurrency,
           providerRequested: "llm_provider",
           providerUsed: "llm_provider",
@@ -266,11 +431,22 @@ export class LLMClient {
       return { data: parsed.data, usage, metadata };
     } catch (error) {
       const normalized = this.normalizeError(error);
+      usage = addUsage(usage, normalized.usage);
+      latestResponseSummary = normalized.responseSummary ?? latestResponseSummary;
+      reasoningFieldPresent ||=
+        normalized.responseSummary?.reasoningFieldPresent ?? false;
       if (normalized.requestAttempts) {
         externalRequestCount += normalized.requestAttempts;
         retryCount += Math.max(0, normalized.requestAttempts - 1);
       }
       const durationMs = Date.now() - startedAt;
+      normalized.usage = usage;
+      normalized.responseSummary = latestResponseSummary;
+      normalized.retryCount = retryCount;
+      normalized.repairCount = repairCount;
+      normalized.finalizationRetryCount = finalizationRetryCount;
+      normalized.externalRequestCount = externalRequestCount;
+      normalized.latencyMs = durationMs;
       await this.record({
         operation: input.schemaName,
         provider: this.config.provider,
@@ -290,9 +466,11 @@ export class LLMClient {
           providerRequestId: normalized.requestId ?? providerRequestId,
           retryCount,
           repairCount,
+          finalizationRetryCount,
           externalRequestCount,
           reasoningFieldPresent,
           httpStatus: normalized.httpStatus ?? httpStatus,
+          ...responseMetadata(latestResponseSummary),
           priceCurrency: this.estimateCost(usage) === undefined ? undefined : this.config.priceCurrency,
           providerRequested: "llm_provider",
           providerUsed: "llm_provider",
@@ -331,16 +509,28 @@ export class LLMClient {
   private validateContent<T>(
     content: string,
     schema: z.ZodType<T>,
-  ): { success: true; data: T } | { success: false; problem: string } {
+  ): { success: true; data: T } | {
+    success: false;
+    problem: string;
+    code: "LLM_STRUCTURED_OUTPUT_INVALID" | "LLM_SCHEMA_VALIDATION_FAILED";
+  } {
     let json: unknown;
     try {
       json = parseStrictJson(content);
     } catch (error) {
-      return { success: false, problem: error instanceof Error ? error.message : "Invalid JSON." };
+      return {
+        success: false,
+        problem: error instanceof Error ? error.message : "Invalid JSON.",
+        code: "LLM_STRUCTURED_OUTPUT_INVALID",
+      };
     }
     const parsed = schema.safeParse(json);
     if (parsed.success) return { success: true, data: parsed.data };
-    return { success: false, problem: validationSummary(parsed.error) };
+    return {
+      success: false,
+      problem: validationSummary(parsed.error),
+      code: "LLM_SCHEMA_VALIDATION_FAILED",
+    };
   }
 
   private async requestWithRetries<T>(
@@ -348,14 +538,15 @@ export class LLMClient {
     input: StructuredCompletionInput<T>,
   ): Promise<RequestResult> {
     let lastError: LLMClientError | undefined;
-    for (let attempt = 0; attempt <= this.config.retryCount; attempt += 1) {
+    const retryLimit = input.allowTransportRetry === false ? 0 : this.config.retryCount;
+    for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
       try {
         const result = await this.callOnce(messages, input);
         return { ...result, retryCount: attempt };
       } catch (error) {
         const normalized = this.normalizeError(error);
         lastError = normalized;
-        if (!normalized.retryable || attempt === this.config.retryCount) {
+        if (!normalized.retryable || attempt === retryLimit) {
           normalized.requestAttempts = attempt + 1;
           throw normalized;
         }
@@ -424,14 +615,47 @@ export class LLMClient {
           requestId,
         );
       }
+      const summary = responseSafetySummary(
+        json,
+        input.maxOutputTokens ?? this.config.maxOutputTokens,
+      );
       const content = json.choices?.[0]?.message?.content;
-      if (typeof content !== "string" || !content.trim()) {
+      if (!summary.firstChoicePresent) {
         throw new LLMClientError(
-          "structured_output_invalid",
-          "LLM provider returned no message content.",
+          "LLM_CHOICES_MISSING",
+          "LLM provider returned no completion choice.",
           false,
           response.status,
-          requestId,
+          requestId ?? json.id,
+          0,
+          { responseSummary: summary, usage: json.usage },
+        );
+      }
+      if (!summary.messagePresent) {
+        throw new LLMClientError(
+          "LLM_MESSAGE_MISSING",
+          "LLM provider returned a choice without a message.",
+          false,
+          response.status,
+          requestId ?? json.id,
+          0,
+          { responseSummary: summary, usage: json.usage },
+        );
+      }
+      if (typeof content !== "string" || !content.trim()) {
+        const code: LLMErrorCode = summary.outputLimitReached
+          ? "LLM_OUTPUT_LIMIT_REACHED_WITHOUT_FINAL_CONTENT"
+          : summary.reasoningFieldPresent
+            ? "LLM_EMPTY_FINAL_CONTENT_AFTER_REASONING"
+            : "LLM_EMPTY_FINAL_CONTENT";
+        throw new LLMClientError(
+          code,
+          "LLM provider returned no usable final message content.",
+          false,
+          response.status,
+          requestId ?? json.id,
+          0,
+          { responseSummary: summary, usage: json.usage },
         );
       }
       return {
@@ -440,10 +664,8 @@ export class LLMClient {
         requestId: requestId ?? json.id,
         model: json.model,
         httpStatus: response.status,
-        reasoningFieldPresent: Object.prototype.hasOwnProperty.call(
-          json.choices?.[0]?.message ?? {},
-          "reasoning_content",
-        ),
+        reasoningFieldPresent: summary.reasoningFieldPresent,
+        responseSafetySummary: summary,
       };
     } catch (error) {
       if (error instanceof LLMClientError) throw error;

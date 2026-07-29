@@ -17,10 +17,16 @@ import {
   TailoredResumeFactualityError,
 } from "@/services/ai/tailored-resume-factuality";
 import {
+  buildGroundedTailoredResumeMessages,
   LLMTailoredResumeWriterProvider,
   MockTailoredResumeWriterProvider,
 } from "@/services/ai/tailored-resume-writer";
 import type { LLMClient, LLMCompletionMetadata } from "@/services/ai/llm-client";
+import {
+  fictionalSmokeBaseResume,
+  fictionalSmokeJD,
+  fictionalSmokeProfile,
+} from "@/scripts/llm-smoke-fixtures";
 
 function profile(): ResumeProfile {
   return {
@@ -143,12 +149,50 @@ function metadata(): LLMCompletionMetadata {
     latencyMs: 10,
     retryCount: 0,
     repairCount: 0,
+    finalizationRetryCount: 0,
     externalRequestCount: 1,
     reasoningFieldPresent: false,
+    responseSafetySummary: {
+      responseId: "provider",
+      choiceCount: 1,
+      firstChoicePresent: true,
+      messagePresent: true,
+      contentState: "present",
+      contentCharacterLength: 2,
+      contentByteLength: 2,
+      finishReason: "stop",
+      reasoningFieldPresent: false,
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      outputLimitReached: null,
+    },
   };
 }
 
 describe("candidate fact registry", () => {
+  it("compacts the grounded prompt without duplicating evidence, requirements, or contract", () => {
+    const facts = buildCandidateFactRegistry(
+      fictionalSmokeProfile,
+      fictionalSmokeBaseResume,
+    );
+    const requirements = buildJobRequirementFacts(fictionalSmokeJD, facts);
+    const messages = buildGroundedTailoredResumeMessages(facts, requirements);
+    const prompt = messages.map((message) => message.content).join("\n");
+    const compactCharacterCount = messages.reduce(
+      (total, message) => total + message.content.length,
+      0,
+    );
+    expect(compactCharacterCount).toBe(1252);
+    expect(2335 - compactCharacterCount).toBe(1083);
+    expect(prompt.match(/^CANDIDATE_FACTS$/gm)).toHaveLength(1);
+    expect(prompt.match(/^JOB_REQUIREMENTS_ONLY$/gm)).toHaveLength(1);
+    expect(prompt).not.toContain("OUTPUT_CONTRACT");
+    expect(prompt).not.toContain("FORBIDDEN_UNSUPPORTED_CLAIMS");
+    expect(prompt).toContain("never candidate evidence");
+    expect(prompt).toContain("Never invent employers");
+  });
+
   it("generates stable IDs, normalizes empty values, and deduplicates skills", () => {
     const first = buildCandidateFactRegistry(profile(), "TypeScript 课程任务管理系统");
     const second = buildCandidateFactRegistry(profile(), "TypeScript 课程任务管理系统");
@@ -319,6 +363,43 @@ describe("factuality repair and safety", () => {
     expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledTimes(2);
     expect(fallback.write).not.toHaveBeenCalled();
     expect(vi.mocked(fakeClient.recordFallback)).not.toHaveBeenCalled();
+  });
+
+  it("does not spend a factuality repair request when the request policy disables it", async () => {
+    const facts = buildCandidateFactRegistry(profile());
+    const unsafe = grounded({
+      text: "开发过 AI 应用项目",
+      sourceFactIds: [factId(facts, "TypeScript")],
+      kind: "fact",
+    });
+    const fakeClient = {
+      structuredCompletion: vi.fn().mockResolvedValue({
+        data: unsafe,
+        metadata: metadata(),
+        usage: {},
+      }),
+      recordSafeObservation: vi.fn(),
+      recordFallback: vi.fn(),
+    } as unknown as LLMClient;
+    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+    await expect(provider.write({
+      profile: profile(),
+      baseResumeMarkdown: "",
+      jdAnalysis: jd(),
+      requestPolicy: {
+        allowTransportRetry: false,
+        allowJsonRepair: false,
+        allowFactualityRepair: false,
+        allowFinalizationRetry: true,
+      },
+    })).rejects.toBeInstanceOf(TailoredResumeFactualityError);
+    expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledOnce();
+    expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[0][0]).toMatchObject({
+      allowTransportRetry: false,
+      allowJsonRepair: false,
+      allowFinalizationRetry: true,
+      finalizationRetryMessages: expect.any(Array),
+    });
   });
 
   it("does not use Mock fallback after a structural provider failure", async () => {

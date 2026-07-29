@@ -2,12 +2,18 @@ import type { TailoredResumeResult } from "@/types/jd";
 import type { JDAnalysisResult } from "@/types/jd";
 import type { ResumeProfile } from "@/services/resume-generator";
 import { generateTailoredResumeContent } from "@/services/tailored-resume-generator";
-import { LLMClient, type LLMCompletionMetadata } from "./llm-client";
+import {
+  LLMClient,
+  type LLMCompletionMetadata,
+  type LLMResponseSafetySummary,
+} from "./llm-client";
 import {
   buildCandidateFactRegistry,
   buildJobRequirementFacts,
   formatFactRegistryForPrompt,
   formatJobRequirementsForPrompt,
+  type CandidateFact,
+  type JobRequirementFact,
 } from "./candidate-fact-registry";
 import {
   groundedTailoredResumeOutputContract,
@@ -26,6 +32,12 @@ export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
   baseResumeMarkdown: string;
   jdAnalysis: JDAnalysisResult;
+  requestPolicy?: {
+    allowTransportRetry?: boolean;
+    allowJsonRepair?: boolean;
+    allowFactualityRepair?: boolean;
+    allowFinalizationRetry?: boolean;
+  };
 };
 
 export type TailoredResumeDiagnostics = {
@@ -39,12 +51,14 @@ export type TailoredResumeDiagnostics = {
   missingSourceIds: number;
   transportRetryCount: number;
   jsonRepairCount: number;
+  finalizationRetryCount: number;
   externalRequestCount: number;
   latencyMs: number;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
   reasoningFieldPresent: boolean;
+  responseSafetySummary?: LLMResponseSafetySummary;
 };
 
 export type TailoredResumeWriterOutput = {
@@ -75,6 +89,7 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         missingSourceIds: 0,
         transportRetryCount: 0,
         jsonRepairCount: 0,
+        finalizationRetryCount: 0,
         externalRequestCount: 0,
         latencyMs: 0,
         reasoningFieldPresent: false,
@@ -114,6 +129,9 @@ function diagnostics(
     missingSourceIds: report.missingSourceIds,
     transportRetryCount: initial.metadata.retryCount + (repaired?.metadata.retryCount ?? 0),
     jsonRepairCount: initial.metadata.repairCount + (repaired?.metadata.repairCount ?? 0),
+    finalizationRetryCount:
+      (initial.metadata.finalizationRetryCount ?? 0) +
+      (repaired?.metadata.finalizationRetryCount ?? 0),
     externalRequestCount:
       initial.metadata.externalRequestCount + (repaired?.metadata.externalRequestCount ?? 0),
     latencyMs: initial.metadata.latencyMs + (repaired?.metadata.latencyMs ?? 0),
@@ -122,7 +140,46 @@ function diagnostics(
     totalTokens: add(initial.usage?.total_tokens, repaired?.usage?.total_tokens),
     reasoningFieldPresent:
       initial.metadata.reasoningFieldPresent || (repaired?.metadata.reasoningFieldPresent ?? false),
+    responseSafetySummary:
+      repaired?.metadata.responseSafetySummary ?? initial.metadata.responseSafetySummary,
   };
+}
+
+const finalizationInstruction = [
+  "Return only the final JSON object.",
+  "Do not output analysis, explanation, Markdown, or prose.",
+  "Use only the supplied candidate fact IDs.",
+  "Do not repeat the instructions.",
+  "Keep every text field within the declared limits.",
+].join("\n");
+
+export function buildGroundedTailoredResumeMessages(
+  candidateFacts: CandidateFact[],
+  jobRequirements: JobRequirementFact[],
+  finalization = false,
+) {
+  return [
+    {
+      role: "system" as const,
+      content: [
+        "Create a concise Chinese tailored resume with internal candidate-fact citations.",
+        "Only CANDIDATE_FACTS prove existing capabilities or experience; JOB_REQUIREMENTS are targets, never candidate evidence.",
+        "Never invent employers, internships, awards, certificates, skills, AI/LLM/API projects, metrics, achievements, or stronger capability levels.",
+        "Goals, learning plans, and transferable foundations must remain explicitly future-oriented.",
+        finalization ? finalizationInstruction : "",
+      ].filter(Boolean).join("\n"),
+    },
+    {
+      role: "user" as const,
+      content: [
+        "CANDIDATE_FACTS",
+        formatFactRegistryForPrompt(candidateFacts),
+        "",
+        "JOB_REQUIREMENTS_ONLY",
+        formatJobRequirementsForPrompt(jobRequirements),
+      ].join("\n"),
+    },
+  ];
 }
 
 export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProvider {
@@ -141,43 +198,28 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         schemaName: "grounded_tailored_resume_result",
         schema: groundedTailoredResumeSchema,
         outputContract: groundedTailoredResumeOutputContract,
-        messages: [
-          {
-            role: "system",
-            content: [
-              "Create a concise Chinese tailored resume with internal candidate-fact citations.",
-              "CANDIDATE_FACTS are the only evidence for existing capabilities and experience.",
-              "JOB_REQUIREMENTS are requirements only and never candidate evidence.",
-              "FORBIDDEN_UNSUPPORTED_CLAIMS: employers, internships, awards, certificates, skills, AI projects, LLM/API practice, metrics, achievements, or stronger capability levels not supported by CANDIDATE_FACTS.",
-              "Do not convert a goal, learning plan, or transferable foundation into completed experience.",
-            ].join("\n"),
-          },
-          {
-            role: "user",
-            content: [
-              "CANDIDATE_FACTS",
-              formatFactRegistryForPrompt(candidateFacts),
-              "",
-              "JOB_REQUIREMENTS (not candidate facts)",
-              formatJobRequirementsForPrompt(jobRequirements),
-              "",
-              "FORBIDDEN_UNSUPPORTED_CLAIMS",
-              jobRequirements.map((item) => item.text).join("\n"),
-              "",
-              `OUTPUT_CONTRACT\n${groundedTailoredResumeOutputContract}`,
-            ].join("\n"),
-          },
-        ],
+        messages: buildGroundedTailoredResumeMessages(candidateFacts, jobRequirements),
+        finalizationRetryMessages:
+          buildGroundedTailoredResumeMessages(candidateFacts, jobRequirements, true),
+        allowTransportRetry: input.requestPolicy?.allowTransportRetry,
+        allowJsonRepair: input.requestPolicy?.allowJsonRepair,
+        allowFinalizationRetry: input.requestPolicy?.allowFinalizationRetry,
       });
       let grounded = groundedTailoredResumeSchema.parse(initial.data);
       let report = evaluateTailoredResumeFactuality(grounded, candidateFacts, jobRequirements);
       let repaired: GroundedCompletion | undefined;
 
-      if (report.status !== "pass") {
+      if (
+        report.status !== "pass" &&
+        input.requestPolicy?.allowFactualityRepair !== false
+      ) {
         repaired = await this.client.structuredCompletion({
           schemaName: "grounded_tailored_resume_factuality_repair",
           schema: groundedTailoredResumeSchema,
           outputContract: groundedTailoredResumeOutputContract,
+          allowTransportRetry: input.requestPolicy?.allowTransportRetry,
+          allowJsonRepair: input.requestPolicy?.allowJsonRepair,
+          allowFinalizationRetry: false,
           messages: [
             {
               role: "system",
@@ -233,6 +275,7 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           missingSourceIds: report.missingSourceIds,
           transportRetryCount: finalDiagnostics.transportRetryCount,
           jsonRepairCount: finalDiagnostics.jsonRepairCount,
+          finalizationRetryCount: finalDiagnostics.finalizationRetryCount,
           externalRequestCount: finalDiagnostics.externalRequestCount,
           reasoningFieldPresent: finalDiagnostics.reasoningFieldPresent,
         },

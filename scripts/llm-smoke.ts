@@ -3,7 +3,12 @@ import { z } from "zod";
 import { getAIConfig, publicAIConfig, validateAIConfig } from "../lib/ai-config";
 import { jdAnalysisResultSchema } from "../schemas/jd";
 import { careerStrategyGenerationResultSchema } from "../schemas/strategy";
-import { LLMClient, LLMClientError, type LLMCompletionMetadata } from "../services/ai/llm-client";
+import {
+  LLMClient,
+  LLMClientError,
+  type LLMCompletionMetadata,
+  type LLMResponseSafetySummary,
+} from "../services/ai/llm-client";
 import { createDatabaseLLMCallObserver } from "../services/ai/llm-observability";
 import {
   careerStrategyOutputContract,
@@ -20,20 +25,24 @@ import {
   fictionalSmokeJob,
   fictionalSmokeProfile,
 } from "./llm-smoke-fixtures";
-import { parseSmokeSelection, smokeRequestBudget } from "./llm-smoke-selection";
+import { parseSmokeArguments, smokeRequestBudget } from "./llm-smoke-selection";
+import { createSmokeRequestLimiter } from "./llm-smoke-request-limit";
 
 async function main() {
   loadEnvConfig(process.cwd());
 
   let selected;
+  let explicitMaxExternalRequests: number | undefined;
   try {
-    selected = parseSmokeSelection(process.argv.slice(2));
+    const parsed = parseSmokeArguments(process.argv.slice(2));
+    selected = parsed.selected;
+    explicitMaxExternalRequests = parsed.maxExternalRequests;
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Invalid smoke selection.");
     process.exitCode = 2;
     return;
   }
-  const maxExternalRequests = smokeRequestBudget(selected);
+  const maxExternalRequests = smokeRequestBudget(selected, explicitMaxExternalRequests);
   let externalRequests = 0;
   const startedAt = Date.now();
 
@@ -58,16 +67,11 @@ async function main() {
     return;
   }
 
-  const limitedFetch: typeof fetch = async (request, init) => {
-    if (externalRequests >= maxExternalRequests) {
-      throw new LLMClientError(
-        "provider_error",
-        `Smoke request budget of ${maxExternalRequests} external calls was exhausted.`,
-      );
-    }
-    externalRequests += 1;
-    return fetch(request, init);
-  };
+  const limitedFetch = createSmokeRequestLimiter(
+    fetch,
+    maxExternalRequests,
+    () => { externalRequests += 1; },
+  );
   const client = new LLMClient(config, limitedFetch, createDatabaseLLMCallObserver());
 
   type SmokeSummary = {
@@ -80,6 +84,10 @@ async function main() {
     totalTokens?: number;
     errorCategory?: string;
     factualityViolationCategories?: string[];
+    responseSafetySummary?: LLMResponseSafetySummary;
+    finalizationRetryCount?: number;
+    externalRequestCount?: number;
+    latencyMs?: number;
   };
   const summaries: SmokeSummary[] = [];
 
@@ -97,6 +105,9 @@ async function main() {
         maxOutputTokens: Math.min(config.maxOutputTokens, 1600),
         outputContract,
         messages,
+        allowTransportRetry: explicitMaxExternalRequests === undefined,
+        allowJsonRepair: explicitMaxExternalRequests === undefined,
+        allowFinalizationRetry: false,
       });
       summaries.push({
         name,
@@ -105,6 +116,7 @@ async function main() {
         inputTokens: result.usage?.prompt_tokens,
         outputTokens: result.usage?.completion_tokens,
         totalTokens: result.usage?.total_tokens,
+        responseSafetySummary: result.metadata.responseSafetySummary,
       });
       return result.data;
     } catch (error) {
@@ -112,6 +124,19 @@ async function main() {
         name,
         success: false,
         errorCategory: error instanceof LLMClientError ? error.code : "provider_error",
+        responseSafetySummary:
+          error instanceof LLMClientError ? error.responseSummary : undefined,
+        inputTokens:
+          error instanceof LLMClientError ? error.usage?.prompt_tokens : undefined,
+        outputTokens:
+          error instanceof LLMClientError ? error.usage?.completion_tokens : undefined,
+        totalTokens:
+          error instanceof LLMClientError ? error.usage?.total_tokens : undefined,
+        finalizationRetryCount:
+          error instanceof LLMClientError ? error.finalizationRetryCount : undefined,
+        externalRequestCount:
+          error instanceof LLMClientError ? error.externalRequestCount : undefined,
+        latencyMs: error instanceof LLMClientError ? error.latencyMs : undefined,
       });
       throw error;
     }
@@ -153,6 +178,14 @@ async function main() {
           profile: fictionalSmokeProfile,
           baseResumeMarkdown: fictionalSmokeBaseResume,
           jdAnalysis: jd,
+          requestPolicy: explicitMaxExternalRequests === undefined
+            ? undefined
+            : {
+                allowTransportRetry: false,
+                allowJsonRepair: false,
+                allowFactualityRepair: false,
+                allowFinalizationRetry: true,
+              },
         });
         summaries.push({
           name: "Tailored resume",
@@ -162,6 +195,7 @@ async function main() {
           outputTokens: output.diagnostics.outputTokens,
           totalTokens: output.diagnostics.totalTokens,
           factualityViolationCategories: output.diagnostics.factualityViolationCategories,
+          responseSafetySummary: output.diagnostics.responseSafetySummary,
         });
       } catch (error) {
         const report = error && typeof error === "object" && "report" in error
@@ -176,6 +210,19 @@ async function main() {
           factualityViolationCategories: report?.violations
             ? [...new Set(report.violations.map((item) => item.category))]
             : undefined,
+          responseSafetySummary:
+            error instanceof LLMClientError ? error.responseSummary : undefined,
+          inputTokens:
+            error instanceof LLMClientError ? error.usage?.prompt_tokens : undefined,
+          outputTokens:
+            error instanceof LLMClientError ? error.usage?.completion_tokens : undefined,
+          totalTokens:
+            error instanceof LLMClientError ? error.usage?.total_tokens : undefined,
+          finalizationRetryCount:
+            error instanceof LLMClientError ? error.finalizationRetryCount : 0,
+          externalRequestCount:
+            error instanceof LLMClientError ? error.externalRequestCount : externalRequests,
+          latencyMs: error instanceof LLMClientError ? error.latencyMs : undefined,
         });
         throw error;
       }
@@ -210,6 +257,10 @@ async function main() {
   }
 
   for (const summary of summaries) {
+    const responseSummary =
+      summary.responseSafetySummary ??
+      summary.diagnostics?.responseSafetySummary ??
+      summary.metadata?.responseSafetySummary;
     console.log(JSON.stringify({
       function: summary.name,
       status: summary.success ? "success" : "failed",
@@ -217,7 +268,10 @@ async function main() {
       providerUsed: "llm_provider",
       model: config.model,
       requestId: summary.metadata?.requestId,
-      latencyMs: summary.diagnostics?.latencyMs ?? summary.metadata?.latencyMs,
+      latencyMs:
+        summary.diagnostics?.latencyMs ??
+        summary.metadata?.latencyMs ??
+        summary.latencyMs,
       inputTokens: summary.inputTokens,
       outputTokens: summary.outputTokens,
       totalTokens: summary.totalTokens,
@@ -232,6 +286,24 @@ async function main() {
       unknownFactIds: summary.diagnostics?.unknownFactIds,
       missingSourceIds: summary.diagnostics?.missingSourceIds,
       reasoningFieldPresent: summary.diagnostics?.reasoningFieldPresent ?? summary.metadata?.reasoningFieldPresent,
+      finalizationRetryCount:
+        summary.diagnostics?.finalizationRetryCount ??
+        summary.metadata?.finalizationRetryCount ??
+        summary.finalizationRetryCount,
+      externalRequestCount:
+        summary.diagnostics?.externalRequestCount ??
+        summary.metadata?.externalRequestCount ??
+        summary.externalRequestCount,
+      responseIdPresent: responseSummary
+        ? responseSummary.responseId !== null
+        : undefined,
+      choiceCount: responseSummary?.choiceCount,
+      messagePresent: responseSummary?.messagePresent,
+      contentState: responseSummary?.contentState,
+      contentCharacterLength: responseSummary?.contentCharacterLength,
+      contentByteLength: responseSummary?.contentByteLength,
+      finishReason: responseSummary?.finishReason,
+      outputLimitReached: responseSummary?.outputLimitReached,
       violationCategories: summary.factualityViolationCategories,
       errorCategory: summary.errorCategory,
     }));
