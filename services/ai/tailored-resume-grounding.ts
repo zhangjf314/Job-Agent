@@ -2,17 +2,19 @@ import { z } from "zod";
 import { tailoredResumeResultSchema } from "@/schemas/jd";
 import type { TailoredResumeResult } from "@/types/jd";
 import {
+  buildGroundedArrayCardinalityOutputContract,
   buildGroundedSectionOutputContract,
   GROUNDED_SECTION_COUNT,
   GROUNDED_SECTION_TYPES_BY_POSITION,
-  GROUNDED_SOURCE_FACT_ID_LIMIT,
+  GROUNDED_TAILORED_RESUME_LIMITS,
 } from "./grounded-tailored-resume-contract";
 
 export const groundedClaimKinds = ["fact", "goal", "format"] as const;
 
 export const groundedTextSchema = z.object({
   text: z.string().trim().min(1).max(80),
-  sourceFactIds: z.array(z.string().trim().min(1)).max(GROUNDED_SOURCE_FACT_ID_LIMIT),
+  sourceFactIds: z.array(z.string().trim().min(1))
+    .max(GROUNDED_TAILORED_RESUME_LIMITS.sourceFactIdsMax),
   kind: z.enum(groundedClaimKinds),
 }).strict();
 
@@ -32,7 +34,11 @@ export const groundedApplicationMaterialsSchema = z.object({
 export const groundedTailoredResumeSchema = z.object({
   sections: z.array(groundedSectionSchema).length(GROUNDED_SECTION_COUNT),
   rewriteExplanation: z.array(z.string().trim().min(1)).max(2),
-  changedSections: z.array(z.string().trim().min(1)).max(2),
+  changedSections: z.array(z.enum(GROUNDED_SECTION_TYPES_BY_POSITION))
+    .max(GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax)
+    .refine((values) => new Set(values).size === values.length, {
+      message: "changedSections must contain unique canonical section types.",
+    }),
   missingFields: z.array(z.string().trim().min(1)).max(2),
   improvementQuestions: z.array(z.string().trim().min(1)).max(2),
   qualityWarnings: z.array(z.string().trim().min(1)).max(2),
@@ -90,9 +96,10 @@ export function groundedClaimEntries(input: GroundedTailoredResume) {
 export const groundedTailoredResumeOutputContract = [
   "Return compact JSON with sections,rewriteExplanation,changedSections,missingFields,improvementQuestions,qualityWarnings,applicationMaterials.",
   buildGroundedSectionOutputContract(),
-  "GroundedText:{text:max80 Chinese chars,sourceFactIds:0..8 unique F_* IDs,kind:fact|goal|format}.",
-  "Every factual line must use kind=fact and cite only supplied F_* candidate IDs. Never cite J_REQ_* IDs.",
-  "Goal text must use kind=goal and must clearly say target, plan, hope, learning, or future. Format text is only a heading or label.",
-  "Each explanatory/warning array has at most 2 short strings. applicationMaterials must include selfIntroduction,applicationEmail,recruiterMessage, each with 1..2 GroundedText; omit none.",
-  "Keep text concise, stay within 1600 output tokens, return JSON only.",
+  "GroundedText:{text:max80 Chinese chars,sourceFactIds,kind:fact|goal|format}.",
+  buildGroundedArrayCardinalityOutputContract(),
+  "Every factual line uses kind=fact and supplied candidate evidence.",
+  "kind=goal must state target/plan/hope/learning/future; kind=format is only heading/label.",
+  "Other arrays:0..2 short strings. applicationMaterials require selfIntroduction,applicationEmail,recruiterMessage, each 1..2 GroundedText.",
+  "Concise JSON only; <=1600 output tokens.",
 ].join(" ");
