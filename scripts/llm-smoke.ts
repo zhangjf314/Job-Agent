@@ -10,6 +10,7 @@ import {
   type LLMResponseSafetySummary,
 } from "../services/ai/llm-client";
 import type { SafeSchemaDiagnosticSummary } from "../services/ai/schema-diagnostics";
+import type { GroundedNormalizationDiagnosticSummary } from "../services/ai/grounded-normalization-diagnostics";
 import type { GroundedNormalizationSummary } from "../services/ai/tailored-resume-grounded-normalizer";
 import { TailoredResumeFactualityError } from "../services/ai/tailored-resume-factuality";
 import { createDatabaseLLMCallObserver } from "../services/ai/llm-observability";
@@ -97,6 +98,7 @@ async function main() {
     latencyMs?: number;
     schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
     groundedNormalizationSummary?: GroundedNormalizationSummary;
+    groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
     additionalRepairBlockedByRequestLimit?: boolean;
     httpStatus?: number;
   };
@@ -154,6 +156,10 @@ async function main() {
         groundedNormalizationSummary:
           error instanceof LLMClientError
             ? error.groundedNormalizationSummary
+            : undefined,
+        groundedNormalizationDiagnosticSummary:
+          error instanceof LLMClientError
+            ? error.groundedNormalizationDiagnosticSummary
             : undefined,
         additionalRepairBlockedByRequestLimit:
           explicitMaxExternalRequests !== undefined &&
@@ -254,6 +260,10 @@ async function main() {
             error instanceof LLMClientError
               ? error.groundedNormalizationSummary
               : undefined,
+          groundedNormalizationDiagnosticSummary:
+            error instanceof LLMClientError
+              ? error.groundedNormalizationDiagnosticSummary
+              : undefined,
           additionalRepairBlockedByRequestLimit:
             explicitMaxExternalRequests !== undefined &&
             error instanceof LLMClientError &&
@@ -323,6 +333,7 @@ async function main() {
         summary.success ||
         summary.diagnostics !== undefined ||
         summary.errorCategory === "LLM_SCHEMA_VALIDATION_FAILED" ||
+        summary.errorCategory === "GROUNDED_NORMALIZATION_FAILED" ||
         summary.errorCategory === "TAILORED_RESUME_FACTUALITY_VIOLATION"
           ? "passed"
           : summary.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID"
@@ -331,7 +342,10 @@ async function main() {
       schemaValidation:
         summary.success || summary.diagnostics !== undefined
           ? "passed"
-          : "failed",
+          : summary.errorCategory === "GROUNDED_NORMALIZATION_FAILED" ||
+              summary.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID"
+            ? "not_reached"
+            : "failed",
       factualityStatus: summary.diagnostics?.factualityStatus,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,
       groundedClaimCount: summary.diagnostics?.groundedClaimCount,
@@ -382,6 +396,8 @@ async function main() {
       finishReason: responseSummary?.finishReason,
       outputLimitReached: responseSummary?.outputLimitReached,
       schemaDiagnostics: summary.schemaDiagnosticSummary,
+      groundedNormalizationDiagnostics:
+        summary.groundedNormalizationDiagnosticSummary,
       additionalRepairBlockedByRequestLimit:
         summary.additionalRepairBlockedByRequestLimit,
       violationCategories: summary.factualityViolationCategories,

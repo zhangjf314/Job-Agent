@@ -1,3 +1,5 @@
+import { assertGroundedNormalizationTopology } from "./grounded-normalization-diagnostics";
+
 export const GROUNDED_SOURCE_FACT_ID_LIMIT = 8;
 
 export const GROUNDED_SECTION_TYPES_BY_POSITION = [
@@ -75,6 +77,10 @@ function normalizeKnownClaims(
 export function normalizeGroundedTailoredResume(
   value: unknown,
 ): GroundedNormalizationResult {
+  // Structural validation is deliberately completed before any summary state,
+  // cloning, canonicalization, or deduplication work begins.
+  assertGroundedNormalizationTopology(value);
+
   const summary: GroundedNormalizationSummary = {
     groundedNormalizationApplied: false,
     defaultedApplicationMaterialArrays: [],

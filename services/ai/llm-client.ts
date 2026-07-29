@@ -16,6 +16,12 @@ import {
   type GroundedNormalizationResult,
   type GroundedNormalizationSummary,
 } from "./tailored-resume-grounded-normalizer";
+import {
+  createUnknownGroundedNormalizationDiagnosticSummary,
+  GroundedNormalizationDiagnosticError,
+  safeGroundedNormalizationDiagnosticMetadata,
+  type GroundedNormalizationDiagnosticSummary,
+} from "./grounded-normalization-diagnostics";
 
 export type LLMErrorCode =
   | "invalid_configuration"
@@ -71,6 +77,7 @@ export class LLMClientError extends Error {
   public latencyMs?: number;
   public schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
   public groundedNormalizationSummary?: GroundedNormalizationSummary;
+  public groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
 
   constructor(
     public readonly code: LLMErrorCode,
@@ -84,6 +91,7 @@ export class LLMClientError extends Error {
       usage?: Usage;
       schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
       groundedNormalizationSummary?: GroundedNormalizationSummary;
+      groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
     },
   ) {
     super(message);
@@ -92,6 +100,8 @@ export class LLMClientError extends Error {
     this.usage = details?.usage;
     this.schemaDiagnosticSummary = details?.schemaDiagnosticSummary;
     this.groundedNormalizationSummary = details?.groundedNormalizationSummary;
+    this.groundedNormalizationDiagnosticSummary =
+      details?.groundedNormalizationDiagnosticSummary;
   }
 }
 
@@ -139,6 +149,7 @@ export type LLMCompletionMetadata = {
   reasoningFieldPresent: boolean;
   thinkingModeRequested: AIConfig["thinkingMode"];
   groundedNormalizationSummary?: GroundedNormalizationSummary;
+  groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
   httpStatus?: number;
   jsonStatus?: "passed" | "failed";
   schemaValidationStatus?: "passed" | "failed" | "not_reached";
@@ -313,6 +324,9 @@ export class LLMClient {
     let reasoningFieldPresent = false;
     let latestResponseSummary: LLMResponseSafetySummary | undefined;
     let latestGroundedNormalizationSummary: GroundedNormalizationSummary | undefined;
+    let latestGroundedNormalizationDiagnosticSummary:
+      | GroundedNormalizationDiagnosticSummary
+      | undefined;
 
     try {
       let initial: RequestResult;
@@ -378,6 +392,8 @@ export class LLMClient {
         input.normalizeParsedJson,
       );
       latestGroundedNormalizationSummary = parsed.groundedNormalizationSummary;
+      latestGroundedNormalizationDiagnosticSummary =
+        parsed.groundedNormalizationDiagnosticSummary;
       if (!parsed.success && input.allowJsonRepair !== false) {
         repairCount = 1;
         const repair = await this.requestWithRetries(
@@ -408,6 +424,8 @@ export class LLMClient {
           input.normalizeParsedJson,
         );
         latestGroundedNormalizationSummary = parsed.groundedNormalizationSummary;
+        latestGroundedNormalizationDiagnosticSummary =
+          parsed.groundedNormalizationDiagnosticSummary;
       }
 
       if (!parsed.success) {
@@ -426,6 +444,8 @@ export class LLMClient {
             responseSummary: latestResponseSummary,
             schemaDiagnosticSummary: parsed.schemaDiagnosticSummary,
             groundedNormalizationSummary: parsed.groundedNormalizationSummary,
+            groundedNormalizationDiagnosticSummary:
+              parsed.groundedNormalizationDiagnosticSummary,
           },
         );
       }
@@ -499,6 +519,9 @@ export class LLMClient {
       latestGroundedNormalizationSummary =
         normalized.groundedNormalizationSummary ??
         latestGroundedNormalizationSummary;
+      latestGroundedNormalizationDiagnosticSummary =
+        normalized.groundedNormalizationDiagnosticSummary ??
+        latestGroundedNormalizationDiagnosticSummary;
       normalized.retryCount = retryCount;
       normalized.repairCount = repairCount;
       normalized.finalizationRetryCount = finalizationRetryCount;
@@ -528,6 +551,9 @@ export class LLMClient {
           reasoningFieldPresent,
           thinkingModeRequested: this.config.thinkingMode,
           ...safeGroundedNormalizationMetadata(latestGroundedNormalizationSummary),
+          ...safeGroundedNormalizationDiagnosticMetadata(
+            latestGroundedNormalizationDiagnosticSummary,
+          ),
           httpStatus: normalized.httpStatus ?? httpStatus,
           jsonStatus:
             normalized.code === "LLM_STRUCTURED_OUTPUT_INVALID"
@@ -590,6 +616,7 @@ export class LLMClient {
     success: true;
     data: T;
     groundedNormalizationSummary?: GroundedNormalizationSummary;
+    groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
   } | {
     success: false;
     problem: string;
@@ -599,6 +626,7 @@ export class LLMClient {
       | "GROUNDED_NORMALIZATION_FAILED";
     schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
     groundedNormalizationSummary?: GroundedNormalizationSummary;
+    groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
   } {
     let json: unknown;
     try {
@@ -616,11 +644,15 @@ export class LLMClient {
         const result = normalizeParsedJson(json);
         json = result.normalized;
         groundedNormalizationSummary = result.summary;
-      } catch {
+      } catch (error) {
         return {
           success: false,
           problem: "Grounded output normalization failed.",
           code: "GROUNDED_NORMALIZATION_FAILED",
+          groundedNormalizationDiagnosticSummary:
+            error instanceof GroundedNormalizationDiagnosticError
+              ? error.diagnosticSummary
+              : createUnknownGroundedNormalizationDiagnosticSummary(),
         };
       }
     }
