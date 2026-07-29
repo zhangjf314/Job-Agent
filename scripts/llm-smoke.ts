@@ -376,6 +376,63 @@ async function main() {
         summary.diagnostics?.factualityRepairRemainingCategories,
       factualityRepairScopeViolation:
         summary.diagnostics?.factualityRepairScopeViolation,
+      repairHttpStatus: summary.diagnostics?.repairHttpStatus,
+      repairJsonStatus: summary.diagnostics?.repairJsonStatus,
+      repairEnvelopeStatus: summary.diagnostics?.repairEnvelopeStatus,
+      repairTargetCoverageStatus:
+        summary.diagnostics?.repairTargetCoverageStatus,
+      repairPatchStructureStatus:
+        summary.diagnostics?.repairPatchStructureStatus,
+      repairPatchSemanticStatus:
+        summary.diagnostics?.repairPatchSemanticStatus,
+      repairScopeStatus: summary.diagnostics?.repairScopeStatus,
+      repairApplyStatus: summary.diagnostics?.repairApplyStatus,
+      postRepairSchemaStatus:
+        summary.diagnostics?.postRepairSchemaStatus,
+      postRepairFactualityStatus:
+        summary.diagnostics?.postRepairFactualityStatus,
+      repairExpectedTargetCount:
+        summary.diagnostics?.repairExpectedTargetCount,
+      repairReceivedCount: summary.diagnostics?.repairReceivedCount,
+      repairAcceptedPatchCount:
+        summary.diagnostics?.repairAcceptedPatchCount,
+      repairMissingTargetIds:
+        summary.diagnostics?.repairMissingTargetIds,
+      repairUnknownTargetCount:
+        summary.diagnostics?.repairUnknownTargetCount,
+      repairDuplicateTargetIds:
+        summary.diagnostics?.repairDuplicateTargetIds,
+      repairTargetOrderMatches:
+        summary.diagnostics?.repairTargetOrderMatches,
+      repairDiagnosticIssueCount:
+        summary.diagnostics?.repairDiagnosticIssueCount,
+      repairReportedDiagnosticIssueCount:
+        summary.diagnostics?.repairReportedDiagnosticIssueCount,
+      repairDiagnosticsTruncated:
+        summary.diagnostics?.repairDiagnosticsTruncated,
+      repairDiagnosticCategories:
+        summary.diagnostics?.repairDiagnosticCategories,
+      repairInvalidActionCount:
+        summary.diagnostics?.repairInvalidActionCount,
+      repairInvalidReplacementCount:
+        summary.diagnostics?.repairInvalidReplacementCount,
+      repairInvalidKindCount:
+        summary.diagnostics?.repairInvalidKindCount,
+      repairKindLocationViolationCount:
+        summary.diagnostics?.repairKindLocationViolationCount,
+      repairMaximumSourceFactIdsObserved:
+        summary.diagnostics?.repairMaximumSourceFactIdsObserved,
+      repairSourceFactIdsLimit:
+        summary.diagnostics?.repairSourceFactIdsLimit,
+      repairDuplicateSourceFactIdCount:
+        summary.diagnostics?.repairDuplicateSourceFactIdCount,
+      repairUnknownSourceFactIdCount:
+        summary.diagnostics?.repairUnknownSourceFactIdCount,
+      repairJdRequirementSourceIdCount:
+        summary.diagnostics?.repairJdRequirementSourceIdCount,
+      repairSourceFactIdsOrderMismatchCount:
+        summary.diagnostics?.repairSourceFactIdsOrderMismatchCount,
+      repairDiagnostics: summary.diagnostics?.repairDiagnostics,
       groundedClaimCount: summary.diagnostics?.groundedClaimCount,
       ungroundedClaimCount: summary.diagnostics?.ungroundedClaimCount,
       unknownFactIds: summary.diagnostics?.unknownFactIds,

@@ -358,6 +358,21 @@ describe("factuality repair and safety", () => {
     expect(output.diagnostics.factualityStatus).toBe("pass");
     expect(output.diagnostics.factualityRepairCount).toBe(1);
     expect(output.diagnostics.jsonRepairCount).toBe(0);
+    expect(output.diagnostics).toMatchObject({
+      repairJsonStatus: "passed",
+      repairEnvelopeStatus: "passed",
+      repairTargetCoverageStatus: "passed",
+      repairPatchStructureStatus: "passed",
+      repairPatchSemanticStatus: "passed",
+      repairScopeStatus: "passed",
+      repairApplyStatus: "passed",
+      postRepairSchemaStatus: "passed",
+      postRepairFactualityStatus: "passed",
+      repairExpectedTargetCount: 1,
+      repairReceivedCount: 1,
+      repairAcceptedPatchCount: 1,
+      repairDiagnosticIssueCount: 0,
+    });
     expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[0][0])
       .toMatchObject({ normalizeParsedJson: expect.any(Function) });
@@ -388,9 +403,42 @@ describe("factuality repair and safety", () => {
         factualityViolationCountAfterRepair: 0,
         factualityViolationsIntroduced: 0,
         factualityRepairScopeViolation: false,
+        repairJsonStatus: "passed",
+        repairEnvelopeStatus: "passed",
+        repairTargetCoverageStatus: "passed",
+        repairPatchStructureStatus: "passed",
+        repairPatchSemanticStatus: "passed",
+        repairScopeStatus: "passed",
+        repairApplyStatus: "passed",
+        postRepairSchemaStatus: "passed",
+        postRepairFactualityStatus: "passed",
+        repairExpectedTargetCount: 1,
+        repairReceivedCount: 1,
+        repairAcceptedPatchCount: 1,
+        repairDiagnosticIssueCount: 0,
       });
+    const storedMetadata = vi.mocked(
+      fakeClient.recordSafeObservation,
+    ).mock.calls[0][0].metadata as Record<string, unknown>;
+    for (const key of [
+      "repairJsonStatus",
+      "repairEnvelopeStatus",
+      "repairTargetCoverageStatus",
+      "repairPatchStructureStatus",
+      "repairPatchSemanticStatus",
+      "repairScopeStatus",
+      "repairApplyStatus",
+      "postRepairSchemaStatus",
+      "postRepairFactualityStatus",
+      "repairExpectedTargetCount",
+      "repairReceivedCount",
+      "repairAcceptedPatchCount",
+    ] as const) {
+      expect(storedMetadata[key]).toBe(output.diagnostics[key]);
+    }
     const recorded = JSON.stringify(vi.mocked(fakeClient.recordSafeObservation).mock.calls);
     expect(recorded).not.toContain("完成 OpenAI-compatible");
+    expect(recorded).not.toContain(factId(facts, "TypeScript"));
     expect(recorded).not.toContain("currentStructuredResult");
     expect(recorded).not.toContain("reasoning_content");
   });
@@ -430,6 +478,75 @@ describe("factuality repair and safety", () => {
     expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledTimes(2);
     expect(fallback.write).not.toHaveBeenCalled();
     expect(vi.mocked(fakeClient.recordFallback)).not.toHaveBeenCalled();
+  });
+
+  it("records safe semantic diagnostics and atomically rejects all patches", async () => {
+    const facts = buildCandidateFactRegistry(profile());
+    const unsafe = grounded({
+      text: "完成 OpenAI-compatible LLM API 接入",
+      sourceFactIds: [factId(facts, "TypeScript")],
+      kind: "fact",
+    });
+    const orderedIds = facts.slice(0, 2).map((fact) => fact.id);
+    const privateReplacement = "PRIVATE_REPAIR_REPLACEMENT";
+    const fakeClient = {
+      structuredCompletion: vi.fn()
+        .mockResolvedValueOnce({
+          data: unsafe,
+          metadata: metadata(),
+          usage: {},
+        })
+        .mockResolvedValueOnce({
+          data: {
+            repairs: [{
+              targetId: "T1",
+              action: "replace",
+              replacement: {
+                text: privateReplacement,
+                sourceFactIds: [...orderedIds].reverse(),
+                kind: "fact",
+              },
+            }],
+          },
+          metadata: metadata(),
+          usage: {},
+        }),
+      recordSafeObservation: vi.fn(),
+      recordFallback: vi.fn(),
+    } as unknown as LLMClient;
+    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+
+    let caught: TailoredResumeFactualityError | undefined;
+    try {
+      await provider.write({
+        profile: profile(),
+        baseResumeMarkdown: "",
+        jdAnalysis: jd(),
+      });
+    } catch (error) {
+      caught = error as TailoredResumeFactualityError;
+    }
+    expect(caught).toBeInstanceOf(TailoredResumeFactualityError);
+    expect(caught?.code).toBe("FACTUALITY_REPAIR_PATCH_SCHEMA_INVALID");
+    expect(caught?.diagnostics).toMatchObject({
+      repairReceivedCount: 1,
+      repairAcceptedPatchCount: 0,
+      repairTargetCoverageStatus: "passed",
+      repairPatchStructureStatus: "passed",
+      repairPatchSemanticStatus: "failed",
+      repairApplyStatus: "not_reached",
+      postRepairFactualityStatus: "not_reached",
+      repairDiagnosticCategories: [
+        "SOURCE_FACT_IDS_ORDER_MISMATCH",
+      ],
+    });
+    const recorded = JSON.stringify(
+      vi.mocked(fakeClient.recordSafeObservation).mock.calls,
+    );
+    expect(recorded).toContain("SOURCE_FACT_IDS_ORDER_MISMATCH");
+    expect(recorded).not.toContain(privateReplacement);
+    for (const id of orderedIds) expect(recorded).not.toContain(id);
+    expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledTimes(2);
   });
 
   it("does not spend a factuality repair request when the request policy disables it", async () => {

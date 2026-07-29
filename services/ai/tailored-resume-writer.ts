@@ -1,6 +1,7 @@
 import type { TailoredResumeResult } from "@/types/jd";
 import type { JDAnalysisResult } from "@/types/jd";
 import type { ResumeProfile } from "@/services/resume-generator";
+import { ZodError } from "zod";
 import { generateTailoredResumeContent } from "@/services/tailored-resume-generator";
 import {
   LLMClient,
@@ -51,6 +52,17 @@ import {
   type FactualityRepairSummary,
   type FactualityRepairTarget,
 } from "./tailored-resume-factuality-repair";
+import {
+  createEmptyFactualityRepairDiagnostics,
+  diagnoseFactualityRepairPatch,
+  markPostRepairFactuality,
+  markPostRepairSchemaFailure,
+  markRepairApplicationPassed,
+  markRepairEnvelopeFailure,
+  markRepairJsonFailure,
+  markRepairScopeFailure,
+  type FactualityRepairDiagnostics,
+} from "./factuality-repair-diagnostics";
 
 export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
@@ -109,7 +121,7 @@ export type TailoredResumeDiagnostics = {
   factualityRepairFailureCategory?: FactualityRepairErrorCode;
   httpStatus?: number;
   responseSafetySummary?: LLMResponseSafetySummary;
-};
+} & FactualityRepairDiagnostics;
 
 export type TailoredResumeWriterOutput = {
   result: TailoredResumeResult;
@@ -169,6 +181,7 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         factualityRepairScopeViolation: false,
         factualityRepairTargetPaths: [],
         factualityRepairTargetCategories: [],
+        ...createEmptyFactualityRepairDiagnostics(0),
         httpStatus: undefined,
       },
     };
@@ -209,6 +222,21 @@ function emptyRepairSummary(report: FactualityReport): FactualityRepairSummary {
     factualityRepairTargetPaths: [],
     factualityRepairTargetCategories: [],
   };
+}
+
+function repairDiagnosticErrorCode(
+  diagnostics: FactualityRepairDiagnostics,
+): FactualityRepairErrorCode {
+  if (diagnostics.repairDuplicateTargetIds.length > 0) {
+    return "FACTUALITY_REPAIR_TARGET_DUPLICATED";
+  }
+  if (diagnostics.repairUnknownTargetCount > 0) {
+    return "FACTUALITY_REPAIR_TARGET_UNKNOWN";
+  }
+  if (diagnostics.repairMissingTargetIds.length > 0) {
+    return "FACTUALITY_REPAIR_TARGET_MISSING";
+  }
+  return "FACTUALITY_REPAIR_PATCH_SCHEMA_INVALID";
 }
 
 function repairCompletionFromError(
@@ -253,6 +281,7 @@ function diagnostics(
   initial: GroundedCompletion,
   repaired: RepairCompletion | undefined,
   repairSummary: FactualityRepairSummary,
+  repairDiagnostics: FactualityRepairDiagnostics,
 ): TailoredResumeDiagnostics {
   const normalizationSummaries = [
     initial.metadata.groundedNormalizationSummary,
@@ -338,6 +367,7 @@ function diagnostics(
       null,
     sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
     ...repairSummary,
+    ...repairDiagnostics,
     httpStatus: repaired?.metadata.httpStatus ?? initial.metadata.httpStatus,
     responseSafetySummary:
       repaired?.metadata.responseSafetySummary ?? initial.metadata.responseSafetySummary,
@@ -414,6 +444,8 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       let repairApplied = false;
       let repairFailureCategory: FactualityRepairErrorCode | undefined;
       let repairSummary = emptyRepairSummary(report);
+      let repairDiagnostics =
+        createEmptyFactualityRepairDiagnostics(0);
 
       if (
         report.status !== "pass" &&
@@ -437,22 +469,52 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
               repairTargets,
             ),
           });
+          repairDiagnostics = diagnoseFactualityRepairPatch(
+            repaired.data,
+            repairTargets,
+            candidateFacts,
+          );
+          repairDiagnostics.repairHttpStatus =
+            repaired.metadata.httpStatus ?? null;
+          if (repairDiagnostics.repairDiagnosticIssueCount > 0) {
+            throw new FactualityRepairError(
+              repairDiagnosticErrorCode(repairDiagnostics),
+            );
+          }
           const patch = validateFactualityRepairPatch(
             repaired.data,
             repairTargets,
             candidateFacts,
           );
-          repairPatchCount = patch.repairs.length;
-          grounded = applyFactualityRepairPatch(
-            grounded,
-            repairTargets,
-            patch,
-          );
+          repairPatchCount =
+            repairDiagnostics.repairAcceptedPatchCount;
+          try {
+            grounded = applyFactualityRepairPatch(
+              grounded,
+              repairTargets,
+              patch,
+            );
+            markRepairApplicationPassed(repairDiagnostics);
+          } catch (error) {
+            if (
+              error instanceof FactualityRepairError &&
+              error.code === "FACTUALITY_REPAIR_SCOPE_VIOLATION"
+            ) {
+              markRepairScopeFailure(repairDiagnostics);
+            } else if (error instanceof ZodError) {
+              markPostRepairSchemaFailure(repairDiagnostics);
+            }
+            throw error;
+          }
           repairApplied = true;
           report = evaluateTailoredResumeFactuality(
             grounded,
             candidateFacts,
             jobRequirements,
+          );
+          markPostRepairFactuality(
+            repairDiagnostics,
+            report.status === "pass",
           );
           repairFailureCategory = classifyFactualityRepairOutcome(
             reportBeforeRepair,
@@ -461,6 +523,9 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         } catch (error) {
           if (error instanceof FactualityRepairError) {
             repairFailureCategory = error.code as FactualityRepairErrorCode;
+          } else if (error instanceof ZodError) {
+            repairFailureCategory =
+              "FACTUALITY_REPAIR_PATCH_SCHEMA_INVALID";
           } else if (
             error instanceof LLMClientError &&
             (
@@ -469,6 +534,16 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             )
           ) {
             repaired = repairCompletionFromError(error, initial);
+            repairDiagnostics =
+              error.code === "LLM_SCHEMA_VALIDATION_FAILED"
+                ? markRepairEnvelopeFailure(
+                    repairTargets.length,
+                    error.httpStatus ?? null,
+                  )
+                : markRepairJsonFailure(
+                    repairTargets.length,
+                    error.httpStatus ?? null,
+                  );
             repairFailureCategory =
               error.code === "LLM_SCHEMA_VALIDATION_FAILED"
                 ? "FACTUALITY_REPAIR_PATCH_SCHEMA_INVALID"
@@ -492,6 +567,7 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         initial,
         repaired,
         repairSummary,
+        repairDiagnostics,
       );
       await this.client.recordSafeObservation({
         operation: "tailored_resume_result",
@@ -572,6 +648,63 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             finalDiagnostics.factualityRepairTargetCategories,
           factualityRepairFailureCategory:
             finalDiagnostics.factualityRepairFailureCategory,
+          repairHttpStatus: finalDiagnostics.repairHttpStatus,
+          repairJsonStatus: finalDiagnostics.repairJsonStatus,
+          repairEnvelopeStatus: finalDiagnostics.repairEnvelopeStatus,
+          repairTargetCoverageStatus:
+            finalDiagnostics.repairTargetCoverageStatus,
+          repairPatchStructureStatus:
+            finalDiagnostics.repairPatchStructureStatus,
+          repairPatchSemanticStatus:
+            finalDiagnostics.repairPatchSemanticStatus,
+          repairScopeStatus: finalDiagnostics.repairScopeStatus,
+          repairApplyStatus: finalDiagnostics.repairApplyStatus,
+          postRepairSchemaStatus:
+            finalDiagnostics.postRepairSchemaStatus,
+          postRepairFactualityStatus:
+            finalDiagnostics.postRepairFactualityStatus,
+          repairExpectedTargetCount:
+            finalDiagnostics.repairExpectedTargetCount,
+          repairReceivedCount: finalDiagnostics.repairReceivedCount,
+          repairAcceptedPatchCount:
+            finalDiagnostics.repairAcceptedPatchCount,
+          repairDiagnosticIssueCount:
+            finalDiagnostics.repairDiagnosticIssueCount,
+          repairReportedDiagnosticIssueCount:
+            finalDiagnostics.repairReportedDiagnosticIssueCount,
+          repairDiagnosticsTruncated:
+            finalDiagnostics.repairDiagnosticsTruncated,
+          repairDiagnosticCategories:
+            finalDiagnostics.repairDiagnosticCategories,
+          repairMissingTargetIds:
+            finalDiagnostics.repairMissingTargetIds,
+          repairUnknownTargetCount:
+            finalDiagnostics.repairUnknownTargetCount,
+          repairDuplicateTargetIds:
+            finalDiagnostics.repairDuplicateTargetIds,
+          repairTargetOrderMatches:
+            finalDiagnostics.repairTargetOrderMatches,
+          repairInvalidActionCount:
+            finalDiagnostics.repairInvalidActionCount,
+          repairInvalidReplacementCount:
+            finalDiagnostics.repairInvalidReplacementCount,
+          repairInvalidKindCount:
+            finalDiagnostics.repairInvalidKindCount,
+          repairKindLocationViolationCount:
+            finalDiagnostics.repairKindLocationViolationCount,
+          repairMaximumSourceFactIdsObserved:
+            finalDiagnostics.repairMaximumSourceFactIdsObserved,
+          repairSourceFactIdsLimit:
+            finalDiagnostics.repairSourceFactIdsLimit,
+          repairDuplicateSourceFactIdCount:
+            finalDiagnostics.repairDuplicateSourceFactIdCount,
+          repairUnknownSourceFactIdCount:
+            finalDiagnostics.repairUnknownSourceFactIdCount,
+          repairJdRequirementSourceIdCount:
+            finalDiagnostics.repairJdRequirementSourceIdCount,
+          repairSourceFactIdsOrderMismatchCount:
+            finalDiagnostics.repairSourceFactIdsOrderMismatchCount,
+          repairDiagnostics: finalDiagnostics.repairDiagnostics,
           httpStatus: finalDiagnostics.httpStatus,
           jsonStatus: "passed",
           normalizationStatus: "passed",

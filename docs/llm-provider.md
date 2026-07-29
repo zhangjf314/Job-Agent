@@ -131,6 +131,18 @@ only target paths, fixed categories, counts, and before/after status; target
 text, replacement text, fact-ID values, prompts, and responses are never
 stored.
 
+Patch validation also emits bounded, value-free diagnostics. It distinguishes
+JSON, envelope, target coverage, per-patch structure, per-patch semantics,
+scope, application, post-repair schema, and post-repair factuality stages.
+Coverage records expected and received counts, missing system-generated `T*`
+IDs, duplicate legal `T*` IDs, an unknown-target count, and whether provider
+order matched system order. Per-target issues contain only fixed categories,
+fixed target IDs and paths, safe value types, cardinalities, and fixed kind
+classes. At most 30 stably sorted issues are reported. Any issue atomically
+rejects the complete patch, accepts zero replacements, and leaves the initial
+Grounded object unchanged. No target or replacement text, fact-ID value,
+candidate/JD text, prompt, response, hash, or encoded fragment is observed.
+
 ## Local real-provider smoke test
 
 Configure `.env`, then run:
