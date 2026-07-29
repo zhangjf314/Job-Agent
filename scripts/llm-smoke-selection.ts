@@ -7,23 +7,58 @@ export const smokeCases = [
 
 export type SmokeCase = (typeof smokeCases)[number];
 
-export function parseSmokeSelection(args: string[]): Set<SmokeCase> {
+export type SmokeArguments = {
+  selected: Set<SmokeCase>;
+  maxExternalRequests?: number;
+};
+
+export function parseSmokeArguments(args: string[]): SmokeArguments {
   const onlyArguments = args.filter((arg) => arg.startsWith("--only="));
-  const unsupportedArguments = args.filter((arg) => !arg.startsWith("--only="));
-  if (unsupportedArguments.length > 0 || onlyArguments.length > 1) {
-    throw new Error("Smoke accepts only one optional --only=<comma-separated-whitelist> argument.");
+  const maxArguments = args.filter((arg) => arg.startsWith("--max-external-requests="));
+  const unsupportedArguments = args.filter(
+    (arg) =>
+      !arg.startsWith("--only=") &&
+      !arg.startsWith("--max-external-requests="),
+  );
+  if (
+    unsupportedArguments.length > 0 ||
+    onlyArguments.length > 1 ||
+    maxArguments.length > 1
+  ) {
+    throw new Error(
+      "Smoke accepts only --only=<comma-separated-whitelist> and --max-external-requests=<1..6>.",
+    );
   }
-  if (onlyArguments.length === 0) return new Set(smokeCases);
-  const values = onlyArguments[0].slice("--only=".length).split(",").map((value) => value.trim()).filter(Boolean);
-  if (values.length === 0) throw new Error("Smoke --only selection cannot be empty.");
-  const allowed = new Set<string>(smokeCases);
-  const invalid = values.filter((value) => !allowed.has(value));
-  if (invalid.length > 0) {
-    throw new Error(`Unsupported smoke case: ${invalid.join(", ")}.`);
+  let selected = new Set<SmokeCase>(smokeCases);
+  if (onlyArguments.length === 1) {
+    const values = onlyArguments[0].slice("--only=".length).split(",").map((value) => value.trim()).filter(Boolean);
+    if (values.length === 0) throw new Error("Smoke --only selection cannot be empty.");
+    const allowed = new Set<string>(smokeCases);
+    const invalid = values.filter((value) => !allowed.has(value));
+    if (invalid.length > 0) {
+      throw new Error(`Unsupported smoke case: ${invalid.join(", ")}.`);
+    }
+    selected = new Set(values as SmokeCase[]);
   }
-  return new Set(values as SmokeCase[]);
+  const rawMax = maxArguments[0]?.slice("--max-external-requests=".length);
+  const maxExternalRequests = rawMax === undefined ? undefined : Number(rawMax);
+  if (
+    rawMax !== undefined &&
+    (!/^[1-6]$/.test(rawMax) || !Number.isSafeInteger(maxExternalRequests))
+  ) {
+    throw new Error("Smoke --max-external-requests must be a safe integer from 1 to 6.");
+  }
+  return { selected, maxExternalRequests };
 }
 
-export function smokeRequestBudget(selected: Set<SmokeCase>) {
-  return selected.size === 1 && selected.has("tailored-resume") ? 2 : 6;
+export function parseSmokeSelection(args: string[]): Set<SmokeCase> {
+  return parseSmokeArguments(args).selected;
+}
+
+export function smokeRequestBudget(
+  selected: Set<SmokeCase>,
+  explicitMaximum?: number,
+) {
+  return explicitMaximum ??
+    (selected.size === 1 && selected.has("tailored-resume") ? 2 : 6);
 }

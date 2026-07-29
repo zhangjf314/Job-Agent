@@ -36,24 +36,38 @@ function realConfig(overrides: Partial<NodeJS.ProcessEnv> = {}) {
   });
 }
 
-function completion(content: string, init?: {
+function completion(content: string | null, init?: {
   status?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   headers?: Record<string, string>;
   reasoningContent?: string;
+  finishReason?: string | null;
+  omitChoices?: boolean;
+  omitMessage?: boolean;
+  omitContent?: boolean;
+  omitResponseId?: boolean;
 }) {
   return new Response(
     JSON.stringify({
-      id: "provider-id",
+      ...(init?.omitResponseId ? {} : { id: "provider-id" }),
       model: "test-model",
-      choices: [{
-        message: {
-          content,
-          ...(init?.reasoningContent === undefined
-            ? {}
-            : { reasoning_content: init.reasoningContent }),
-        },
-      }],
+      ...(init?.omitChoices
+        ? {}
+        : {
+            choices: [{
+              finish_reason: init?.finishReason,
+              ...(init?.omitMessage
+                ? {}
+                : {
+                    message: {
+                      ...(init?.omitContent ? {} : { content }),
+                      ...(init?.reasoningContent === undefined
+                        ? {}
+                        : { reasoning_content: init.reasoningContent }),
+                    },
+                  }),
+            }],
+          }),
       usage: init?.usage,
     }),
     { status: init?.status ?? 200, headers: init?.headers },
@@ -259,21 +273,250 @@ describe("structured output", () => {
   it("uses only final content and records reasoning-field presence without storing reasoning text", async () => {
     const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
     const observer: LLMCallObserver = { async record(record) { records.push(record); } };
-    const fetcher = vi.fn(async () => completion('{"ok":true}', {
+    const fetcher = vi.fn(async () => completion(
+      '{"ok":true,"message":"PRIVATE FINAL CONTENT"}',
+      {
       reasoningContent: "PRIVATE REASONING MUST NOT BE STORED",
-    })) as typeof fetch;
+      },
+    )) as typeof fetch;
     const result = await client(fetcher, {}, observer).structuredCompletion(input());
 
-    expect(result.data).toEqual({ ok: true, message: "ok" });
+    expect(result.data).toEqual({ ok: true, message: "PRIVATE FINAL CONTENT" });
     expect(result.metadata.reasoningFieldPresent).toBe(true);
+    expect(result.metadata.responseSafetySummary).toMatchObject({
+      responseId: "provider-id",
+      choiceCount: 1,
+      firstChoicePresent: true,
+      messagePresent: true,
+      contentState: "present",
+      contentCharacterLength: expect.any(Number),
+      contentByteLength: expect.any(Number),
+      reasoningFieldPresent: true,
+    });
     expect(records[0].metadata).toMatchObject({ reasoningFieldPresent: true });
     expect(JSON.stringify(records)).not.toContain("PRIVATE REASONING MUST NOT BE STORED");
+    expect(JSON.stringify(records)).not.toContain("PRIVATE FINAL CONTENT");
   });
 
   it("reports reasoning-field absence without inventing it", async () => {
     const fetcher = vi.fn(async () => completion('{"ok":true}')) as typeof fetch;
     const result = await client(fetcher).structuredCompletion(input());
     expect(result.metadata.reasoningFieldPresent).toBe(false);
+  });
+
+  it.each([
+    ["missing", null, { omitContent: true }, "LLM_EMPTY_FINAL_CONTENT"],
+    ["null", null, {}, "LLM_EMPTY_FINAL_CONTENT"],
+    ["empty", "", {}, "LLM_EMPTY_FINAL_CONTENT"],
+    ["whitespace", " \n\t", {}, "LLM_EMPTY_FINAL_CONTENT"],
+  ] as const)(
+    "classifies %s final content and preserves only safe response metadata",
+    async (state, content, completionInit, code) => {
+      const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
+      const observer: LLMCallObserver = { async record(record) { records.push(record); } };
+      const fetcher = vi.fn(async () => completion(content, {
+        ...completionInit,
+        finishReason: "stop",
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+      })) as typeof fetch;
+      await expect(client(fetcher, {}, observer).structuredCompletion(input()))
+        .rejects.toMatchObject({
+          code,
+          responseSummary: {
+            contentState: state,
+            responseId: "provider-id",
+            choiceCount: 1,
+            firstChoicePresent: true,
+            messagePresent: true,
+            promptTokens: 12,
+            completionTokens: 3,
+            totalTokens: 15,
+          },
+        });
+      expect(records[0]).toMatchObject({
+        errorCode: code,
+        promptTokens: 12,
+        completionTokens: 3,
+        totalTokens: 15,
+        metadata: {
+          contentState: state,
+          contentCharacterLength: state === "missing" || state === "null" ? null : expect.any(Number),
+          contentByteLength: state === "missing" || state === "null" ? null : expect.any(Number),
+        },
+      });
+    },
+  );
+
+  it("distinguishes missing choices and missing messages without finalization retry", async () => {
+    const choicesMissing = vi.fn(async () => completion(null, { omitChoices: true })) as typeof fetch;
+    await expect(client(choicesMissing).structuredCompletion({
+      ...input(),
+      finalizationRetryMessages: input().messages,
+    })).rejects.toMatchObject({ code: "LLM_CHOICES_MISSING" });
+    expect(choicesMissing).toHaveBeenCalledOnce();
+
+    const messageMissing = vi.fn(async () => completion(null, { omitMessage: true })) as typeof fetch;
+    await expect(client(messageMissing).structuredCompletion({
+      ...input(),
+      finalizationRetryMessages: input().messages,
+    })).rejects.toMatchObject({ code: "LLM_MESSAGE_MISSING" });
+    expect(messageMissing).toHaveBeenCalledOnce();
+  });
+
+  it("distinguishes reasoning-only and output-limit empty responses", async () => {
+    const reasoningOnly = vi.fn(async () => completion("", {
+      reasoningContent: "PRIVATE REASONING",
+      finishReason: "stop",
+    })) as typeof fetch;
+    await expect(client(reasoningOnly).structuredCompletion(input())).rejects.toMatchObject({
+      code: "LLM_EMPTY_FINAL_CONTENT_AFTER_REASONING",
+      responseSummary: { reasoningFieldPresent: true, outputLimitReached: null },
+    });
+
+    const outputLimited = vi.fn(async () => completion("", {
+      reasoningContent: "PRIVATE REASONING",
+      finishReason: "length",
+    })) as typeof fetch;
+    await expect(client(outputLimited).structuredCompletion(input())).rejects.toMatchObject({
+      code: "LLM_OUTPUT_LIMIT_REACHED_WITHOUT_FINAL_CONTENT",
+      responseSummary: { reasoningFieldPresent: true, outputLimitReached: true },
+    });
+
+    const tokenLimited = vi.fn(async () => completion("", {
+      finishReason: "stop",
+      usage: { prompt_tokens: 10, completion_tokens: 1600, total_tokens: 1610 },
+    })) as typeof fetch;
+    await expect(client(tokenLimited).structuredCompletion({
+      ...input(),
+      maxOutputTokens: 1600,
+    })).rejects.toMatchObject({
+      code: "LLM_OUTPUT_LIMIT_REACHED_WITHOUT_FINAL_CONTENT",
+      responseSummary: { completionTokens: 1600, outputLimitReached: true },
+    });
+  });
+
+  it("uses null when the provider omits usage and response ID", async () => {
+    const fetcher = vi.fn(async () => completion("", {
+      omitResponseId: true,
+      finishReason: "stop",
+    })) as typeof fetch;
+    await expect(client(fetcher).structuredCompletion(input())).rejects.toMatchObject({
+      responseSummary: {
+        responseId: null,
+        promptTokens: null,
+        completionTokens: null,
+        totalTokens: null,
+        outputLimitReached: null,
+      },
+    });
+  });
+
+  it.each([
+    ["missing", null, { omitContent: true }],
+    ["null", null, {}],
+    ["reasoning-only", "", { reasoningContent: "PRIVATE REASONING" }],
+    ["output-limit", "", { finishReason: "length" }],
+  ] as const)(
+    "finalization-retries %s content once",
+    async (_state, content, completionInit) => {
+      const fetcher = vi.fn()
+        .mockResolvedValueOnce(completion(content, completionInit))
+        .mockResolvedValueOnce(completion('{"ok":true}')) as typeof fetch;
+      await expect(client(fetcher).structuredCompletion({
+        ...input(),
+        finalizationRetryMessages: input().messages,
+      })).resolves.toMatchObject({
+        data: { ok: true },
+        metadata: { finalizationRetryCount: 1, externalRequestCount: 2 },
+      });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("uses exactly one finalization retry and aggregates usage, latency metadata, and counters", async () => {
+    const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
+    const observer: LLMCallObserver = { async record(record) { records.push(record); } };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(completion("", {
+        reasoningContent: "PRIVATE REASONING",
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }))
+      .mockResolvedValueOnce(completion('{"ok":true}', {
+        usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
+        finishReason: "stop",
+      })) as typeof fetch;
+    const result = await client(fetcher, {}, observer).structuredCompletion({
+      ...input(),
+      finalizationRetryMessages: [{ role: "user", content: "SAFE FINALIZATION INPUT" }],
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.usage).toEqual({ prompt_tokens: 17, completion_tokens: 8, total_tokens: 25 });
+    expect(result.metadata).toMatchObject({
+      finalizationRetryCount: 1,
+      externalRequestCount: 2,
+      retryCount: 0,
+      reasoningFieldPresent: true,
+      responseSafetySummary: { contentState: "present" },
+    });
+    const finalizationBody = String(vi.mocked(fetcher).mock.calls[1][1]?.body);
+    expect(finalizationBody).toContain("SAFE FINALIZATION INPUT");
+    expect(finalizationBody).not.toContain("PRIVATE REASONING");
+    expect(records[0].metadata).toMatchObject({ finalizationRetryCount: 1 });
+    expect(JSON.stringify(records)).not.toContain("PRIVATE REASONING");
+  });
+
+  it("fails after one empty finalization retry and never makes a third request", async () => {
+    const fetcher = vi.fn(async () => completion("   ")) as typeof fetch;
+    await expect(client(fetcher).structuredCompletion({
+      ...input(),
+      finalizationRetryMessages: input().messages,
+    })).rejects.toMatchObject({
+      code: "LLM_FINALIZATION_RETRY_FAILED",
+      finalizationRetryCount: 1,
+      externalRequestCount: 2,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not finalization-retry HTTP, invalid JSON, or schema failures", async () => {
+    for (const [status, code] of [
+      [401, "authentication_failed"],
+      [429, "rate_limited"],
+      [503, "provider_error"],
+    ] as const) {
+      const http = vi.fn(async () => new Response("", { status })) as typeof fetch;
+      await expect(client(http).structuredCompletion({
+        ...input(),
+        allowTransportRetry: false,
+        finalizationRetryMessages: input().messages,
+      })).rejects.toMatchObject({ code });
+      expect(http).toHaveBeenCalledOnce();
+    }
+
+    const invalidJson = vi.fn(async () => completion("not json")) as typeof fetch;
+    await expect(client(invalidJson).structuredCompletion({
+      ...input(),
+      allowJsonRepair: false,
+      finalizationRetryMessages: input().messages,
+    })).rejects.toMatchObject({ code: "LLM_STRUCTURED_OUTPUT_INVALID" });
+    expect(invalidJson).toHaveBeenCalledOnce();
+
+    const invalidSchema = vi.fn(async () => completion('{"ok":false}')) as typeof fetch;
+    await expect(client(invalidSchema).structuredCompletion({
+      ...input(),
+      allowJsonRepair: false,
+      finalizationRetryMessages: input().messages,
+    })).rejects.toMatchObject({ code: "LLM_SCHEMA_VALIDATION_FAILED" });
+    expect(invalidSchema).toHaveBeenCalledOnce();
+  });
+
+  it("can disable transport retries independently", async () => {
+    const fetcher = vi.fn(async () => new Response("", { status: 503 })) as typeof fetch;
+    await expect(client(fetcher, { LLM_RETRY_COUNT: "3" }).structuredCompletion({
+      ...input(),
+      allowTransportRetry: false,
+    })).rejects.toMatchObject({ code: "provider_error", requestAttempts: 1 });
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it("accepts an outer Markdown JSON fence", async () => {
@@ -284,7 +527,7 @@ describe("structured output", () => {
   it("does not extract arbitrary JSON from surrounding prose", async () => {
     const fetcher = vi.fn(async () => completion('Here is JSON: {"ok":true}')) as typeof fetch;
     await expect(client(fetcher).structuredCompletion(input())).rejects.toMatchObject({
-      code: "structured_output_invalid",
+      code: "LLM_STRUCTURED_OUTPUT_INVALID",
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
@@ -310,7 +553,8 @@ describe("structured output", () => {
     const initialBody = JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body));
     const repairBody = JSON.parse(String(vi.mocked(fetcher).mock.calls[1][1]?.body));
     expect(initialBody.messages.at(-1).content).toContain("Object with exactly ok:true.");
-    expect(repairBody.messages[0].content).toContain("Object with exactly ok:true.");
+    expect(JSON.stringify(initialBody).match(/Object with exactly ok:true\./g)).toHaveLength(1);
+    expect(JSON.stringify(repairBody).match(/Object with exactly ok:true\./g)).toHaveLength(1);
   });
 
   it("repairs a schema mismatch exactly once", async () => {
@@ -324,7 +568,7 @@ describe("structured output", () => {
   it("fails clearly when the repair is still invalid", async () => {
     const fetcher = vi.fn(async () => completion("{}")) as typeof fetch;
     await expect(client(fetcher).structuredCompletion(input())).rejects.toMatchObject({
-      code: "structured_output_invalid",
+      code: "LLM_SCHEMA_VALIDATION_FAILED",
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
