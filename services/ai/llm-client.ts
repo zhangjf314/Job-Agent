@@ -324,6 +324,10 @@ export class LLMClient {
     });
   }
 
+  async recordSafeObservation(input: Parameters<LLMCallObserver["record"]>[0]) {
+    await this.record(input);
+  }
+
   private validateContent<T>(
     content: string,
     schema: z.ZodType<T>,
