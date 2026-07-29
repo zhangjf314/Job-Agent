@@ -6,6 +6,7 @@ import {
   buildJobRequirementFacts,
 } from "@/services/ai/candidate-fact-registry";
 import {
+  groundedTailoredResumeOutputContract,
   groundedTailoredResumeSchema,
   stripGroundingMetadata,
   type GroundedTailoredResume,
@@ -192,6 +193,13 @@ describe("candidate fact registry", () => {
     expect(prompt).not.toContain("FORBIDDEN_UNSUPPORTED_CLAIMS");
     expect(prompt).toContain("never candidate evidence");
     expect(prompt).toContain("Never invent employers");
+    expect(groundedTailoredResumeOutputContract).toContain(
+      "fixed order summary,skills,projects,experiences,education,others",
+    );
+    expect(groundedTailoredResumeOutputContract).toContain(
+      "sourceFactIds:0..8 unique F_* IDs",
+    );
+    expect(groundedTailoredResumeOutputContract).toContain("omit none");
   });
 
   it("generates stable IDs, normalizes empty values, and deduplicates skills", () => {
@@ -338,6 +346,19 @@ describe("factuality repair and safety", () => {
     expect(output.diagnostics.factualityRepairCount).toBe(1);
     expect(output.diagnostics.jsonRepairCount).toBe(0);
     expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[0][0])
+      .toMatchObject({ normalizeParsedJson: expect.any(Function) });
+    expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[1][0])
+      .toMatchObject({ normalizeParsedJson: expect.any(Function) });
+    expect(vi.mocked(fakeClient.recordSafeObservation).mock.calls[0][0].metadata)
+      .toMatchObject({
+        groundedNormalizationApplied: false,
+        defaultedApplicationMaterialArrayCount: 0,
+        defaultedApplicationMaterialPaths: [],
+        canonicalizedSectionTypeCount: 0,
+        deduplicatedSourceFactIdCount: 0,
+        sourceFactIdLimit: 8,
+      });
     const recorded = JSON.stringify(vi.mocked(fakeClient.recordSafeObservation).mock.calls);
     expect(recorded).not.toContain("完成 OpenAI-compatible");
     expect(recorded).not.toContain("currentStructuredResult");

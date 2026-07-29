@@ -86,6 +86,23 @@ LLM_OUTPUT_PRICE_PER_MILLION=
 Prices are never hard-coded. Missing prices or usage leave cost unavailable and
 do not block the call.
 
+### Grounded tailored-resume normalization
+
+Tailored-resume JSON passes through a narrow allowlisted normalizer before the
+strict Grounded Zod schema. Section `type` is assigned from the fixed output
+position, and string-only `sourceFactIds` arrays are deduplicated in original
+order. The bounded source-ID limit is eight; every ID is still checked against
+the candidate fact registry, while unknown and `J_REQ_*` IDs fail the
+factuality gate. Unknown object fields are rejected rather than recursively
+coerced or passed through.
+
+The three application-material arrays remain required and non-empty because
+the unchanged public business schema requires non-empty strings. Missing,
+`null`, or wrongly typed material arrays are not synthesized or coerced and
+continue to fail schema validation. Safe observation stores only normalization
+counts, the fixed limit, and fixed schema paths—never generated text or fact-ID
+values.
+
 ## Local real-provider smoke test
 
 Configure `.env`, then run:

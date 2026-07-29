@@ -10,6 +10,8 @@ import {
   type LLMResponseSafetySummary,
 } from "../services/ai/llm-client";
 import type { SafeSchemaDiagnosticSummary } from "../services/ai/schema-diagnostics";
+import type { GroundedNormalizationSummary } from "../services/ai/tailored-resume-grounded-normalizer";
+import { TailoredResumeFactualityError } from "../services/ai/tailored-resume-factuality";
 import { createDatabaseLLMCallObserver } from "../services/ai/llm-observability";
 import {
   careerStrategyOutputContract,
@@ -94,7 +96,9 @@ async function main() {
     externalRequestCount?: number;
     latencyMs?: number;
     schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
+    groundedNormalizationSummary?: GroundedNormalizationSummary;
     additionalRepairBlockedByRequestLimit?: boolean;
+    httpStatus?: number;
   };
   const summaries: SmokeSummary[] = [];
 
@@ -124,6 +128,7 @@ async function main() {
         outputTokens: result.usage?.completion_tokens,
         totalTokens: result.usage?.total_tokens,
         responseSafetySummary: result.metadata.responseSafetySummary,
+        httpStatus: result.metadata.httpStatus,
       });
       return result.data;
     } catch (error) {
@@ -146,10 +151,15 @@ async function main() {
         latencyMs: error instanceof LLMClientError ? error.latencyMs : undefined,
         schemaDiagnosticSummary:
           error instanceof LLMClientError ? error.schemaDiagnosticSummary : undefined,
+        groundedNormalizationSummary:
+          error instanceof LLMClientError
+            ? error.groundedNormalizationSummary
+            : undefined,
         additionalRepairBlockedByRequestLimit:
           explicitMaxExternalRequests !== undefined &&
           error instanceof LLMClientError &&
           error.code === "LLM_SCHEMA_VALIDATION_FAILED",
+        httpStatus: error instanceof LLMClientError ? error.httpStatus : undefined,
       });
       throw error;
     }
@@ -204,6 +214,10 @@ async function main() {
           responseSafetySummary: output.diagnostics.responseSafetySummary,
         });
       } catch (error) {
+        const factualityDiagnostics =
+          error instanceof TailoredResumeFactualityError
+            ? error.diagnostics as TailoredResumeDiagnostics | undefined
+            : undefined;
         const report = error && typeof error === "object" && "report" in error
           ? (error as { report?: { violations?: Array<{ category: string }> } }).report
           : undefined;
@@ -212,7 +226,12 @@ async function main() {
           success: false,
           errorCategory: error instanceof LLMClientError
             ? error.code
+            : error instanceof TailoredResumeFactualityError
+              ? factualityDiagnostics?.factualityRepairCount
+                ? "FACTUALITY_REPAIR_FAILED"
+                : "TAILORED_RESUME_FACTUALITY_VIOLATION"
             : error instanceof Error ? error.name : "provider_error",
+          diagnostics: factualityDiagnostics,
           factualityViolationCategories: report?.violations
             ? [...new Set(report.violations.map((item) => item.category))]
             : undefined,
@@ -231,10 +250,15 @@ async function main() {
           latencyMs: error instanceof LLMClientError ? error.latencyMs : undefined,
           schemaDiagnosticSummary:
             error instanceof LLMClientError ? error.schemaDiagnosticSummary : undefined,
+          groundedNormalizationSummary:
+            error instanceof LLMClientError
+              ? error.groundedNormalizationSummary
+              : undefined,
           additionalRepairBlockedByRequestLimit:
             explicitMaxExternalRequests !== undefined &&
             error instanceof LLMClientError &&
             error.code === "LLM_SCHEMA_VALIDATION_FAILED",
+          httpStatus: error instanceof LLMClientError ? error.httpStatus : undefined,
         });
         throw error;
       }
@@ -281,6 +305,10 @@ async function main() {
       model: config.model,
       thinkingModeRequested: config.thinkingMode,
       requestId: summary.metadata?.requestId,
+      httpStatus:
+        summary.diagnostics?.httpStatus ??
+        summary.metadata?.httpStatus ??
+        summary.httpStatus,
       latencyMs:
         summary.diagnostics?.latencyMs ??
         summary.metadata?.latencyMs ??
@@ -291,13 +319,49 @@ async function main() {
       estimatedCostMicros: summary.metadata?.estimatedCostMicros,
       costCurrency: summary.metadata?.priceCurrency,
       fallbackUsed: false,
-      schemaValidation: summary.success ? "passed" : "failed",
+      jsonParse:
+        summary.success ||
+        summary.diagnostics !== undefined ||
+        summary.errorCategory === "LLM_SCHEMA_VALIDATION_FAILED" ||
+        summary.errorCategory === "TAILORED_RESUME_FACTUALITY_VIOLATION"
+          ? "passed"
+          : summary.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID"
+            ? "failed"
+            : undefined,
+      schemaValidation:
+        summary.success || summary.diagnostics !== undefined
+          ? "passed"
+          : "failed",
       factualityStatus: summary.diagnostics?.factualityStatus,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,
       groundedClaimCount: summary.diagnostics?.groundedClaimCount,
       ungroundedClaimCount: summary.diagnostics?.ungroundedClaimCount,
       unknownFactIds: summary.diagnostics?.unknownFactIds,
       missingSourceIds: summary.diagnostics?.missingSourceIds,
+      groundedNormalizationApplied:
+        summary.diagnostics?.groundedNormalizationApplied ??
+        summary.metadata?.groundedNormalizationSummary?.groundedNormalizationApplied ??
+        summary.groundedNormalizationSummary?.groundedNormalizationApplied,
+      defaultedApplicationMaterialArrayCount:
+        summary.diagnostics?.defaultedApplicationMaterialArrayCount ??
+        summary.metadata?.groundedNormalizationSummary?.defaultedApplicationMaterialArrays.length ??
+        summary.groundedNormalizationSummary?.defaultedApplicationMaterialArrays.length,
+      defaultedApplicationMaterialPaths:
+        summary.diagnostics?.defaultedApplicationMaterialPaths ??
+        summary.metadata?.groundedNormalizationSummary?.defaultedApplicationMaterialArrays ??
+        summary.groundedNormalizationSummary?.defaultedApplicationMaterialArrays,
+      canonicalizedSectionTypeCount:
+        summary.diagnostics?.canonicalizedSectionTypeCount ??
+        summary.metadata?.groundedNormalizationSummary?.canonicalizedSectionTypes ??
+        summary.groundedNormalizationSummary?.canonicalizedSectionTypes,
+      deduplicatedSourceFactIdCount:
+        summary.diagnostics?.deduplicatedSourceFactIdCount ??
+        summary.metadata?.groundedNormalizationSummary?.deduplicatedFactIdCount ??
+        summary.groundedNormalizationSummary?.deduplicatedFactIdCount,
+      sourceFactIdLimit:
+        summary.diagnostics?.sourceFactIdLimit ??
+        summary.metadata?.groundedNormalizationSummary?.sourceFactIdLimit ??
+        summary.groundedNormalizationSummary?.sourceFactIdLimit,
       reasoningFieldPresent: summary.diagnostics?.reasoningFieldPresent ?? summary.metadata?.reasoningFieldPresent,
       finalizationRetryCount:
         summary.diagnostics?.finalizationRetryCount ??
