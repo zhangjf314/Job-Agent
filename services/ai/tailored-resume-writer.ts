@@ -66,6 +66,7 @@ export type TailoredResumeDiagnostics = {
   defaultedApplicationMaterialArrayCount: number;
   defaultedApplicationMaterialPaths: string[];
   canonicalizedSectionTypeCount: number;
+  canonicalizedSectionOrderCount: number;
   deduplicatedSourceFactIdCount: number;
   sourceFactIdLimit: number;
   httpStatus?: number;
@@ -108,6 +109,7 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         defaultedApplicationMaterialArrayCount: 0,
         defaultedApplicationMaterialPaths: [],
         canonicalizedSectionTypeCount: 0,
+        canonicalizedSectionOrderCount: 0,
         deduplicatedSourceFactIdCount: 0,
         sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
         httpStatus: undefined,
@@ -179,6 +181,10 @@ function diagnostics(
     ],
     canonicalizedSectionTypeCount: normalizationSummaries.reduce(
       (total, summary) => total + summary.canonicalizedSectionTypes,
+      0,
+    ),
+    canonicalizedSectionOrderCount: normalizationSummaries.reduce(
+      (total, summary) => total + summary.canonicalizedSectionOrders,
       0,
     ),
     deduplicatedSourceFactIdCount: normalizationSummaries.reduce(
@@ -289,7 +295,6 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
                   path: item.path,
                   safeSummary: item.safeSummary,
                 })),
-                outputContract: groundedTailoredResumeOutputContract,
               }),
             },
           ],
@@ -335,6 +340,8 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             finalDiagnostics.defaultedApplicationMaterialPaths,
           canonicalizedSectionTypeCount:
             finalDiagnostics.canonicalizedSectionTypeCount,
+          canonicalizedSectionOrderCount:
+            finalDiagnostics.canonicalizedSectionOrderCount,
           deduplicatedSourceFactIdCount:
             finalDiagnostics.deduplicatedSourceFactIdCount,
           sourceFactIdLimit: finalDiagnostics.sourceFactIdLimit,

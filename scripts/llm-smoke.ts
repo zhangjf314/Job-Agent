@@ -99,6 +99,7 @@ async function main() {
     schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
     groundedNormalizationSummary?: GroundedNormalizationSummary;
     groundedNormalizationDiagnosticSummary?: GroundedNormalizationDiagnosticSummary;
+    sectionCount?: number;
     additionalRepairBlockedByRequestLimit?: boolean;
     httpStatus?: number;
   };
@@ -218,6 +219,7 @@ async function main() {
           totalTokens: output.diagnostics.totalTokens,
           factualityViolationCategories: output.diagnostics.factualityViolationCategories,
           responseSafetySummary: output.diagnostics.responseSafetySummary,
+          sectionCount: output.result.sections.length,
         });
       } catch (error) {
         const factualityDiagnostics =
@@ -346,6 +348,15 @@ async function main() {
               summary.errorCategory === "LLM_STRUCTURED_OUTPUT_INVALID"
             ? "not_reached"
             : "failed",
+      groundedSchemaStatus:
+        summary.diagnostics || summary.success
+          ? "passed"
+          : summary.errorCategory === "LLM_SCHEMA_VALIDATION_FAILED"
+            ? "failed"
+            : "not_reached",
+      schemaIssueCount:
+        summary.schemaDiagnosticSummary?.issueCount ??
+        (summary.diagnostics || summary.success ? 0 : undefined),
       factualityStatus: summary.diagnostics?.factualityStatus,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,
       groundedClaimCount: summary.diagnostics?.groundedClaimCount,
@@ -356,6 +367,64 @@ async function main() {
         summary.diagnostics?.groundedNormalizationApplied ??
         summary.metadata?.groundedNormalizationSummary?.groundedNormalizationApplied ??
         summary.groundedNormalizationSummary?.groundedNormalizationApplied,
+      normalizationStatus:
+        summary.diagnostics || summary.success
+          ? "passed"
+          : summary.errorCategory === "GROUNDED_NORMALIZATION_FAILED"
+            ? "failed"
+            : "not_reached",
+      normalizationIssueCount:
+        summary.groundedNormalizationDiagnosticSummary?.issueCount ??
+        (summary.diagnostics || summary.success ? 0 : undefined),
+      normalizationNodePaths:
+        summary.groundedNormalizationDiagnosticSummary?.issues.map(
+          (issue) => issue.nodePath,
+        ) ?? (summary.diagnostics || summary.success ? [] : undefined),
+      normalizationUnknownKeyCount:
+        summary.groundedNormalizationDiagnosticSummary?.issues.reduce(
+          (total, issue) => total + issue.unknownKeyCount,
+          0,
+        ) ?? (summary.diagnostics || summary.success ? 0 : undefined),
+      normalizationUnknownValueTypeCounts:
+        summary.groundedNormalizationDiagnosticSummary
+          ? summary.groundedNormalizationDiagnosticSummary.issues.reduce<
+              Record<string, number>
+            >((counts, issue) => {
+              for (const [valueType, count] of Object.entries(
+                issue.unknownValueTypeCounts,
+              )) {
+                counts[valueType] = (counts[valueType] ?? 0) + count;
+              }
+              return counts;
+            }, {})
+          : summary.diagnostics || summary.success
+            ? {}
+            : undefined,
+      sectionCount: summary.sectionCount,
+      sectionsWithUnknownKeys:
+        summary.groundedNormalizationDiagnosticSummary?.issues.filter(
+          (issue) =>
+            issue.nodePath.startsWith("$.sections[") &&
+            issue.unknownKeyCount > 0,
+        ).length ?? (summary.diagnostics || summary.success ? 0 : undefined),
+      sectionsMissingTitle:
+        summary.groundedNormalizationDiagnosticSummary?.issues.filter(
+          (issue) =>
+            issue.nodePath.startsWith("$.sections[") &&
+            issue.missingAllowedKeys.includes("title"),
+        ).length ?? (summary.diagnostics || summary.success ? 0 : undefined),
+      sectionsMissingLines:
+        summary.groundedNormalizationDiagnosticSummary?.issues.filter(
+          (issue) =>
+            issue.nodePath.startsWith("$.sections[") &&
+            issue.missingAllowedKeys.includes("lines"),
+        ).length ?? (summary.diagnostics || summary.success ? 0 : undefined),
+      sectionsMissingOrder:
+        summary.groundedNormalizationDiagnosticSummary?.issues.filter(
+          (issue) =>
+            issue.nodePath.startsWith("$.sections[") &&
+            issue.missingAllowedKeys.includes("order"),
+        ).length ?? (summary.diagnostics || summary.success ? 0 : undefined),
       defaultedApplicationMaterialArrayCount:
         summary.diagnostics?.defaultedApplicationMaterialArrayCount ??
         summary.metadata?.groundedNormalizationSummary?.defaultedApplicationMaterialArrays.length ??
@@ -368,6 +437,10 @@ async function main() {
         summary.diagnostics?.canonicalizedSectionTypeCount ??
         summary.metadata?.groundedNormalizationSummary?.canonicalizedSectionTypes ??
         summary.groundedNormalizationSummary?.canonicalizedSectionTypes,
+      canonicalizedSectionOrderCount:
+        summary.diagnostics?.canonicalizedSectionOrderCount ??
+        summary.metadata?.groundedNormalizationSummary?.canonicalizedSectionOrders ??
+        summary.groundedNormalizationSummary?.canonicalizedSectionOrders,
       deduplicatedSourceFactIdCount:
         summary.diagnostics?.deduplicatedSourceFactIdCount ??
         summary.metadata?.groundedNormalizationSummary?.deduplicatedFactIdCount ??
@@ -401,6 +474,39 @@ async function main() {
       additionalRepairBlockedByRequestLimit:
         summary.additionalRepairBlockedByRequestLimit,
       violationCategories: summary.factualityViolationCategories,
+      inventedInternship:
+        summary.factualityViolationCategories?.includes(
+          "INVENTED_INTERNSHIP",
+        ) ?? (summary.diagnostics ? false : undefined),
+      inventedEmployer:
+        summary.factualityViolationCategories?.includes(
+          "INVENTED_EMPLOYMENT",
+        ) ?? (summary.diagnostics ? false : undefined),
+      inventedAward:
+        summary.factualityViolationCategories?.includes("INVENTED_AWARD") ??
+        (summary.diagnostics ? false : undefined),
+      inventedAIProject:
+        summary.factualityViolationCategories?.includes(
+          "INVENTED_AI_PROJECT",
+        ) ?? (summary.diagnostics ? false : undefined),
+      inventedLLMExperience:
+        summary.factualityViolationCategories?.includes(
+          "INVENTED_LLM_EXPERIENCE",
+        ) ?? (summary.diagnostics ? false : undefined),
+      inventedMetric:
+        summary.factualityViolationCategories?.includes("INVENTED_METRIC") ??
+        (summary.diagnostics ? false : undefined),
+      unsupportedSkill:
+        summary.factualityViolationCategories?.includes("UNSUPPORTED_SKILL") ??
+        (summary.diagnostics ? false : undefined),
+      jdRequirementRepresentedAsFact:
+        summary.factualityViolationCategories?.includes(
+          "JD_REQUIREMENT_AS_FACT",
+        ) ?? (summary.diagnostics ? false : undefined),
+      factStrengthEscalation:
+        summary.factualityViolationCategories?.includes(
+          "FACT_STRENGTH_ESCALATION",
+        ) ?? (summary.diagnostics ? false : undefined),
       errorCategory: summary.errorCategory,
     }));
   }

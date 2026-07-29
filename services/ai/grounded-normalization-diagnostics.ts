@@ -1,3 +1,11 @@
+import {
+  GROUNDED_APPLICATION_MATERIAL_KEYS,
+  GROUNDED_ROOT_KEYS,
+  GROUNDED_SECTION_COUNT,
+  GROUNDED_SECTION_KEYS,
+  GROUNDED_TEXT_KEYS,
+} from "./grounded-tailored-resume-contract";
+
 export const MAX_GROUNDED_NORMALIZATION_DIAGNOSTIC_ISSUES = 20;
 export const MAX_GROUNDED_NORMALIZATION_DIAGNOSTIC_PATH_LENGTH = 256;
 
@@ -42,37 +50,15 @@ export type GroundedNormalizationDiagnosticSummary = {
   issues: GroundedNormalizationNodeDiagnostic[];
 };
 
-const ROOT_ALLOWED_KEYS = [
-  "sections",
-  "rewriteExplanation",
-  "changedSections",
-  "missingFields",
-  "improvementQuestions",
-  "qualityWarnings",
-  "applicationMaterials",
-] as const;
-const SECTION_ALLOWED_KEYS = ["type", "title", "lines", "order"] as const;
-const GROUNDED_TEXT_ALLOWED_KEYS = [
-  "text",
-  "sourceFactIds",
-  "kind",
-] as const;
-const APPLICATION_MATERIALS_ALLOWED_KEYS = [
-  "selfIntroduction",
-  "applicationEmail",
-  "recruiterMessage",
-] as const;
-const CANONICAL_SECTION_POSITION_COUNT = 6;
-
 // `resume` is not accepted by the Grounded schema. It is a fixed,
 // diagnostic-only envelope token used to identify a common wrong nesting
 // level without retaining any model-generated wrapper name.
 const DIAGNOSTIC_ONLY_ENVELOPE_KEYS = ["resume"] as const;
 const GLOBAL_SAFE_STRUCTURAL_VOCABULARY = new Set<string>([
-  ...ROOT_ALLOWED_KEYS,
-  ...SECTION_ALLOWED_KEYS,
-  ...GROUNDED_TEXT_ALLOWED_KEYS,
-  ...APPLICATION_MATERIALS_ALLOWED_KEYS,
+  ...GROUNDED_ROOT_KEYS,
+  ...GROUNDED_SECTION_KEYS,
+  ...GROUNDED_TEXT_KEYS,
+  ...GROUNDED_APPLICATION_MATERIAL_KEYS,
   ...DIAGNOSTIC_ONLY_ENVELOPE_KEYS,
 ]);
 
@@ -229,8 +215,8 @@ function inspectGroundedTextArray(
       nodePath: `${nodePath}[${index}]`,
       value: entry,
       spec: {
-        allowedKeys: GROUNDED_TEXT_ALLOWED_KEYS,
-        requiredKeys: GROUNDED_TEXT_ALLOWED_KEYS,
+        allowedKeys: GROUNDED_TEXT_KEYS,
+        requiredKeys: GROUNDED_TEXT_KEYS,
       },
     });
   });
@@ -288,8 +274,8 @@ function collectGroundedNormalizationTopologyIssues(
 ): GroundedNormalizationNodeDiagnostic[] {
   const issues: GroundedNormalizationNodeDiagnostic[] = [];
   const rootSpec = {
-    allowedKeys: ROOT_ALLOWED_KEYS,
-    requiredKeys: ROOT_ALLOWED_KEYS,
+    allowedKeys: GROUNDED_ROOT_KEYS,
+    requiredKeys: GROUNDED_ROOT_KEYS,
   };
 
   if (!isRecord(value)) {
@@ -303,7 +289,7 @@ function collectGroundedNormalizationTopologyIssues(
     );
   } else {
     const rootKeys = Object.keys(value);
-    const presentRootKeyCount = ROOT_ALLOWED_KEYS.filter((key) =>
+    const presentRootKeyCount = GROUNDED_ROOT_KEYS.filter((key) =>
       Object.prototype.hasOwnProperty.call(value, key),
     ).length;
     const soleRootEntry =
@@ -352,14 +338,14 @@ function collectGroundedNormalizationTopologyIssues(
       ) {
         (value.sections as unknown[]).forEach((section, index) => {
           const sectionPath = `$.sections[${index}]`;
-          if (index >= CANONICAL_SECTION_POSITION_COUNT) {
+          if (index >= GROUNDED_SECTION_COUNT) {
             issues.push(
               createDiagnostic({
                 nodePath: sectionPath,
                 category: "UNKNOWN_SECTION_POSITION",
                 spec: {
-                  allowedKeys: SECTION_ALLOWED_KEYS,
-                  requiredKeys: SECTION_ALLOWED_KEYS,
+                  allowedKeys: GROUNDED_SECTION_KEYS,
+                  requiredKeys: GROUNDED_SECTION_KEYS,
                 },
                 value: section,
               }),
@@ -371,8 +357,8 @@ function collectGroundedNormalizationTopologyIssues(
               nodePath: sectionPath,
               value: section,
               spec: {
-                allowedKeys: SECTION_ALLOWED_KEYS,
-                requiredKeys: SECTION_ALLOWED_KEYS,
+                allowedKeys: GROUNDED_SECTION_KEYS,
+                requiredKeys: GROUNDED_SECTION_KEYS,
               },
             }) &&
             Object.prototype.hasOwnProperty.call(section, "lines")
@@ -405,14 +391,14 @@ function collectGroundedNormalizationTopologyIssues(
           nodePath: "$.applicationMaterials",
           value: value.applicationMaterials,
           spec: {
-            allowedKeys: APPLICATION_MATERIALS_ALLOWED_KEYS,
-            requiredKeys: APPLICATION_MATERIALS_ALLOWED_KEYS,
+            allowedKeys: GROUNDED_APPLICATION_MATERIAL_KEYS,
+            requiredKeys: GROUNDED_APPLICATION_MATERIAL_KEYS,
           },
         })
       ) {
         const applicationMaterials =
           value.applicationMaterials as Record<string, unknown>;
-        for (const key of APPLICATION_MATERIALS_ALLOWED_KEYS) {
+        for (const key of GROUNDED_APPLICATION_MATERIAL_KEYS) {
           if (Object.prototype.hasOwnProperty.call(applicationMaterials, key)) {
             inspectGroundedTextArray(
               issues,
@@ -471,7 +457,7 @@ export function createUnknownGroundedNormalizationDiagnosticSummary(): GroundedN
       {
         nodePath: "$",
         category: "UNKNOWN_NORMALIZATION_FAILURE",
-        allowedKeyCount: ROOT_ALLOWED_KEYS.length,
+        allowedKeyCount: GROUNDED_ROOT_KEYS.length,
         presentAllowedKeyCount: 0,
         missingAllowedKeys: [],
         misplacedKnownKeys: [],

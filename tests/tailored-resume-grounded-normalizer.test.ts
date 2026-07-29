@@ -14,6 +14,7 @@ import {
   normalizeGroundedTailoredResume,
   REQUIRED_APPLICATION_MATERIAL_PATHS,
 } from "@/services/ai/tailored-resume-grounded-normalizer";
+import { GROUNDED_SECTION_COUNT } from "@/services/ai/grounded-tailored-resume-contract";
 import {
   evaluateTailoredResumeFactuality,
 } from "@/services/ai/tailored-resume-factuality";
@@ -54,7 +55,7 @@ type RawFixture = {
 
 function rawFixture(): RawFixture {
   return {
-    sections: Array.from({ length: 4 }, (_, index) => ({
+    sections: Array.from({ length: GROUNDED_SECTION_COUNT }, (_, index) => ({
       type: GROUNDED_SECTION_TYPES_BY_POSITION[index],
       title: `section ${index}`,
       lines: [claim()],
@@ -148,16 +149,19 @@ describe("strict grounded tailored-resume normalization", () => {
     const result = normalizeGroundedTailoredResume(input);
     const sections = (result.normalized as typeof input).sections;
     expect(sections.map((section) => section.type))
-      .toEqual(GROUNDED_SECTION_TYPES_BY_POSITION.slice(0, 4));
-    expect(sections.map((section) => section.order)).toEqual([0, 1, 2, 3]);
+      .toEqual(GROUNDED_SECTION_TYPES_BY_POSITION);
+    expect(sections.map((section) => section.order)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(result.summary.canonicalizedSectionTypes).toBe(0);
+    expect(result.summary.canonicalizedSectionOrders).toBe(0);
   });
 
   it("assigns section types only from fixed output positions", () => {
     const input = rawFixture();
     input.sections[0].type = "invented";
+    input.sections[0].order = 99;
     input.sections[0].title = "education";
     delete (input.sections[1] as { type?: string }).type;
+    delete (input.sections[1] as { order?: number }).order;
     const result = normalizeGroundedTailoredResume(input);
     const sections = (result.normalized as typeof input).sections;
     expect(sections[0]).toMatchObject({
@@ -166,7 +170,9 @@ describe("strict grounded tailored-resume normalization", () => {
       order: 0,
     });
     expect(sections[1].type).toBe("skills");
+    expect(sections[1].order).toBe(1);
     expect(result.summary.canonicalizedSectionTypes).toBe(2);
+    expect(result.summary.canonicalizedSectionOrders).toBe(2);
   });
 
   it("does not accept a seventh or structurally unknown section", () => {
@@ -176,18 +182,6 @@ describe("strict grounded tailored-resume normalization", () => {
       title: "unknown",
       lines: [claim()],
       order: 6,
-    });
-    input.sections.push({
-      type: "invented",
-      title: "unknown 2",
-      lines: [claim()],
-      order: 7,
-    });
-    input.sections.push({
-      type: "invented",
-      title: "unknown 3",
-      lines: [claim()],
-      order: 8,
     });
     const result = normalizeGroundedTailoredResume(input);
     expect((result.normalized as typeof input).sections).toHaveLength(7);
@@ -280,7 +274,7 @@ describe("strict grounded tailored-resume normalization", () => {
       defaultedApplicationMaterialArrays: [],
     });
     expect(report.status).toBe("pass");
-    expect(stripGroundingMetadata(grounded).sections).toHaveLength(4);
+    expect(stripGroundingMetadata(grounded).sections).toHaveLength(6);
   });
 
   it("does not disguise the combined real-deviation fixture when all required materials are missing", () => {
@@ -396,6 +390,7 @@ describe("strict grounded tailored-resume normalization", () => {
     expect(records[0].metadata).toMatchObject({
       groundedNormalizationApplied: true,
       canonicalizedSectionTypeCount: 1,
+      canonicalizedSectionOrderCount: 0,
       deduplicatedSourceFactIdCount: 1,
       sourceFactIdLimit: 8,
     });
