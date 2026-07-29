@@ -89,9 +89,11 @@ do not block the call.
 ### Grounded tailored-resume normalization
 
 Tailored-resume JSON passes through a narrow allowlisted normalizer before the
-strict Grounded Zod schema. Section `type` is assigned from the fixed output
-position, and string-only `sourceFactIds` arrays are deduplicated in original
-order. The bounded source-ID limit is eight; every ID is still checked against
+strict Grounded Zod schema. The production output contract, topology
+diagnostics, and normalizer share one fixed section definition:
+`type,title,lines,order`. Section `type` and `order` are assigned from the fixed
+output position, and string-only `sourceFactIds` arrays are deduplicated in
+original order. The bounded source-ID limit is eight; every ID is still checked against
 the candidate fact registry, while unknown and `J_REQ_*` IDs fail the
 factuality gate. Unknown object fields are rejected rather than recursively
 coerced or passed through.

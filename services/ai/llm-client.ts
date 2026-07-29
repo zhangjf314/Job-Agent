@@ -110,6 +110,16 @@ export type ChatMessage = {
   content: string;
 };
 
+export function buildStructuredOutputInstruction(
+  schemaName: string,
+  outputContract?: string,
+) {
+  return [
+    `Return only one JSON value matching schema "${schemaName}". Do not include commentary.`,
+    outputContract ? `Required output contract: ${outputContract}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 export type StructuredCompletionInput<T> = {
   messages: ChatMessage[];
   schemaName: string;
@@ -725,10 +735,10 @@ export class LLMClient {
             ...messages,
             {
               role: "user",
-              content: [
-                `Return only one JSON value matching schema "${input.schemaName}". Do not include commentary.`,
-                input.outputContract ? `Required output contract: ${input.outputContract}` : "",
-              ].filter(Boolean).join("\n"),
+              content: buildStructuredOutputInstruction(
+                input.schemaName,
+                input.outputContract,
+              ),
             },
           ],
           ...(this.config.jsonMode

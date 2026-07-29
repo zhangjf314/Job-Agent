@@ -126,9 +126,11 @@ function grounded(
   return groundedTailoredResumeSchema.parse({
     sections: [
       { type: "summary", title: "个人概况", lines: [claim], order: 0 },
-      { type: "education", title: "教育经历", lines: [], order: 1 },
-      { type: "skills", title: "技能", lines: [], order: 2 },
-      { type: "projects", title: "项目", lines: [], order: 3 },
+      { type: "skills", title: "技能", lines: [], order: 1 },
+      { type: "projects", title: "项目", lines: [], order: 2 },
+      { type: "experiences", title: "经历", lines: [], order: 3 },
+      { type: "education", title: "教育经历", lines: [], order: 4 },
+      { type: "others", title: "其他", lines: [], order: 5 },
     ],
     rewriteExplanation: [],
     changedSections: [],
@@ -350,12 +352,18 @@ describe("factuality repair and safety", () => {
       .toMatchObject({ normalizeParsedJson: expect.any(Function) });
     expect(vi.mocked(fakeClient.structuredCompletion).mock.calls[1][0])
       .toMatchObject({ normalizeParsedJson: expect.any(Function) });
+    expect(
+      JSON.stringify(
+        vi.mocked(fakeClient.structuredCompletion).mock.calls[1][0].messages,
+      ),
+    ).not.toContain("outputContract");
     expect(vi.mocked(fakeClient.recordSafeObservation).mock.calls[0][0].metadata)
       .toMatchObject({
         groundedNormalizationApplied: false,
         defaultedApplicationMaterialArrayCount: 0,
         defaultedApplicationMaterialPaths: [],
         canonicalizedSectionTypeCount: 0,
+        canonicalizedSectionOrderCount: 0,
         deduplicatedSourceFactIdCount: 0,
         sourceFactIdLimit: 8,
       });
