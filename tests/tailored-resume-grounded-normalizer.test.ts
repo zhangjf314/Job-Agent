@@ -481,6 +481,85 @@ describe("strict grounded tailored-resume normalization", () => {
     expect(observed).not.toContain("PRIVATE_API_KEY");
   });
 
+  it("propagates only safe topology diagnostics through the client and observer", async () => {
+    const input = rawFixture() as RawFixture & Record<string, unknown>;
+    input.PRIVATE_UNKNOWN_ROOT_NAME = {
+      nested: "PRIVATE_UNKNOWN_ROOT_VALUE",
+    };
+    const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
+    const observer: LLMCallObserver = {
+      async record(record) {
+        records.push(record);
+      },
+    };
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      id: "provider-id",
+      choices: [{
+        finish_reason: "stop",
+        message: { content: JSON.stringify(input) },
+      }],
+    }), { status: 200 })) as typeof fetch;
+    const client = new LLMClient(getAIConfig({
+      AI_PROVIDER: "llm_provider",
+      LLM_API_KEY: "PRIVATE_API_KEY",
+      LLM_MODEL: "test-model",
+      LLM_BASE_URL: "https://llm.example.test/v1",
+      LLM_RETRY_COUNT: "0",
+    }), fetcher, observer);
+
+    let caught: unknown;
+    try {
+      await client.structuredCompletion({
+        schemaName: "grounded_tailored_resume_result",
+        schema: groundedTailoredResumeSchema,
+        messages: [{ role: "user", content: "PRIVATE_PROMPT" }],
+        normalizeParsedJson: normalizeGroundedTailoredResume,
+        allowJsonRepair: false,
+        allowTransportRetry: false,
+        allowFinalizationRetry: false,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      code: "GROUNDED_NORMALIZATION_FAILED",
+      message: "Grounded output normalization failed.",
+      externalRequestCount: 1,
+      groundedNormalizationDiagnosticSummary: {
+        diagnosticVersion: 1,
+        issueCount: 1,
+        truncated: false,
+        issues: [
+          {
+            nodePath: "$",
+            category: "UNKNOWN_KEYS_AT_NODE",
+            unknownKeyCount: 1,
+            unknownValueTypeCounts: { object: 1 },
+          },
+        ],
+      },
+    });
+    expect(records[0].metadata).toMatchObject({
+      normalizationDiagnosticVersion: 1,
+      normalizationIssueCount: 1,
+      normalizationReportedIssueCount: 1,
+      normalizationIssuesTruncated: false,
+      normalizationNodePaths: ["$"],
+      normalizationIssueCategories: ["UNKNOWN_KEYS_AT_NODE"],
+      normalizationUnknownKeyCount: 1,
+      normalizationUnknownValueTypeCounts: { object: 1 },
+      jsonStatus: "passed",
+      schemaValidationStatus: "not_reached",
+    });
+    const observed = JSON.stringify({ caught, records });
+    expect(observed).not.toContain("PRIVATE_UNKNOWN_ROOT_NAME");
+    expect(observed).not.toContain("PRIVATE_UNKNOWN_ROOT_VALUE");
+    expect(observed).not.toContain("nested");
+    expect(observed).not.toContain("PRIVATE_PROMPT");
+    expect(observed).not.toContain("PRIVATE_API_KEY");
+  });
+
   it("documents the three required paths without defaulting them", () => {
     expect(REQUIRED_APPLICATION_MATERIAL_PATHS).toEqual([
       "applicationMaterials.selfIntroduction",
