@@ -13,6 +13,9 @@ import type { SafeSchemaDiagnosticSummary } from "../services/ai/schema-diagnost
 import type { GroundedNormalizationDiagnosticSummary } from "../services/ai/grounded-normalization-diagnostics";
 import type { GroundedNormalizationSummary } from "../services/ai/tailored-resume-grounded-normalizer";
 import { tailoredResumePipelineStageStatuses } from "../services/ai/pipeline-stage-status";
+import {
+  classifyGroundedSchemaFailure,
+} from "../services/ai/grounded-tailored-resume-contract";
 import { TailoredResumeFactualityError } from "../services/ai/tailored-resume-factuality";
 import { createDatabaseLLMCallObserver } from "../services/ai/llm-observability";
 import {
@@ -438,6 +441,21 @@ async function main() {
         summary.diagnostics?.deduplicatedSourceFactIdCount ??
         summary.metadata?.groundedNormalizationSummary?.deduplicatedFactIdCount ??
         summary.groundedNormalizationSummary?.deduplicatedFactIdCount,
+      rewriteExplanationReceivedType:
+        summary.diagnostics?.rewriteExplanationReceivedType ??
+        summary.metadata?.groundedNormalizationSummary
+          ?.rewriteExplanationReceivedType ??
+        summary.groundedNormalizationSummary?.rewriteExplanationReceivedType,
+      rewriteExplanationCount:
+        summary.diagnostics?.rewriteExplanationCount ??
+        summary.metadata?.groundedNormalizationSummary
+          ?.rewriteExplanationCount ??
+        summary.groundedNormalizationSummary?.rewriteExplanationCount,
+      rewriteExplanationLimit:
+        summary.diagnostics?.rewriteExplanationLimit ??
+        summary.metadata?.groundedNormalizationSummary
+          ?.rewriteExplanationLimit ??
+        summary.groundedNormalizationSummary?.rewriteExplanationLimit,
       changedSectionsCount:
         summary.diagnostics?.changedSectionsCount ??
         summary.metadata?.groundedNormalizationSummary?.changedSectionsCount ??
@@ -514,6 +532,10 @@ async function main() {
           "FACT_STRENGTH_ESCALATION",
         ) ?? (summary.diagnostics ? false : undefined),
       errorCategory: summary.errorCategory,
+      schemaBusinessErrorCategory: classifyGroundedSchemaFailure(
+        "grounded_tailored_resume_result",
+        summary.schemaDiagnosticSummary,
+      ),
     }));
   }
   console.log(JSON.stringify({

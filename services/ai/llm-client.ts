@@ -23,6 +23,9 @@ import {
   type GroundedNormalizationDiagnosticSummary,
 } from "./grounded-normalization-diagnostics";
 import type { PipelineStageStatus } from "./pipeline-stage-status";
+import {
+  classifyGroundedSchemaFailure,
+} from "./grounded-tailored-resume-contract";
 
 export type LLMErrorCode =
   | "invalid_configuration"
@@ -618,6 +621,10 @@ export class LLMClient {
                 : undefined,
           ...responseMetadata(latestResponseSummary),
           ...safeSchemaDiagnosticMetadata(normalized.schemaDiagnosticSummary),
+          schemaBusinessErrorCategory: classifyGroundedSchemaFailure(
+            input.schemaName,
+            normalized.schemaDiagnosticSummary,
+          ),
           priceCurrency: this.estimateCost(usage) === undefined ? undefined : this.config.priceCurrency,
           providerRequested: "llm_provider",
           providerUsed: "llm_provider",
