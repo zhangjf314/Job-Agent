@@ -152,6 +152,7 @@ function metadata(): LLMCompletionMetadata {
     finalizationRetryCount: 0,
     externalRequestCount: 1,
     reasoningFieldPresent: false,
+    thinkingModeRequested: "provider_default",
     responseSafetySummary: {
       responseId: "provider",
       choiceCount: 1,

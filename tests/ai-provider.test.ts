@@ -98,7 +98,45 @@ describe("AI provider configuration", () => {
   it("allows Mock mode without real-provider values", () => {
     const config = getAIConfig({ AI_PROVIDER: "mock" });
     expect(validateAIConfig(config).provider).toBe("mock");
+    expect(config.thinkingMode).toBe("provider_default");
     expect(getEffectiveAIProvider(config)).toBe("mock");
+  });
+
+  it.each(["provider_default", "enabled", "disabled"] as const)(
+    "accepts thinking mode %s",
+    (thinkingMode) => {
+      expect(realConfig({ LLM_THINKING_MODE: thinkingMode }).thinkingMode).toBe(thinkingMode);
+    },
+  );
+
+  it("does not require thinking-mode provider support in Mock mode", () => {
+    const config = getAIConfig({
+      AI_PROVIDER: "mock",
+      LLM_THINKING_MODE: "disabled",
+    });
+    expect(validateAIConfig(config)).toMatchObject({
+      provider: "mock",
+      thinkingMode: "disabled",
+    });
+    expect(publicAIConfig(config).thinkingMode).toBe("disabled");
+  });
+
+  it("rejects an invalid thinking mode in real and Mock modes without exposing the API key", () => {
+    for (const provider of ["llm_provider", "mock"]) {
+      let caught: unknown;
+      try {
+        getAIConfig({
+          AI_PROVIDER: provider,
+          LLM_API_KEY: "PRIVATE_API_KEY",
+          LLM_THINKING_MODE: "automatic",
+        });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(AIConfigurationError);
+      expect(String(caught)).toContain("LLM_THINKING_MODE");
+      expect(String(caught)).not.toContain("PRIVATE_API_KEY");
+    }
   });
 
   it("requires an API key in real mode", () => {
@@ -228,6 +266,77 @@ describe("OpenAI-compatible HTTP client", () => {
     expect(body.response_format).toEqual({ type: "json_object" });
   });
 
+  it.each([
+    ["provider_default", undefined],
+    ["enabled", { type: "enabled" }],
+    ["disabled", { type: "disabled" }],
+  ] as const)("maps thinking mode %s to the request body", async (mode, expected) => {
+    const fetcher = vi.fn(async () => completion('{"ok":true}')) as typeof fetch;
+    await client(fetcher, { LLM_THINKING_MODE: mode }).structuredCompletion(input());
+    const request = vi.mocked(fetcher).mock.calls[0][1];
+    const body = JSON.parse(String(request?.body));
+
+    if (expected === undefined) {
+      expect(body).not.toHaveProperty("thinking");
+    } else {
+      expect(body.thinking).toEqual(expected);
+    }
+    expect(body).toMatchObject({
+      model: "test-model",
+      max_tokens: 1600,
+      stream: false,
+      response_format: { type: "json_object" },
+    });
+    expect(body).not.toHaveProperty("reasoning_effort");
+    expect(body).not.toHaveProperty("reasoning_content");
+    expect(body).not.toHaveProperty("extra_body");
+    expect(new Headers(request?.headers).get("Authorization")).toBe("Bearer test-secret");
+  });
+
+  it.each([400, 422])(
+    "classifies HTTP %i thinking rejection as safe and non-retryable",
+    async (status) => {
+      const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
+      const observer: LLMCallObserver = { async record(record) { records.push(record); } };
+      const fetcher = vi.fn(async () =>
+        new Response("thinking is unsupported PRIVATE_PROVIDER_DETAIL", { status })) as typeof fetch;
+
+      let caught: unknown;
+      try {
+        await client(
+          fetcher,
+          { LLM_THINKING_MODE: "disabled", LLM_RETRY_COUNT: "2" },
+          observer,
+        ).structuredCompletion(input());
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toMatchObject({
+        code: "THINKING_PARAMETER_UNSUPPORTED",
+        retryable: false,
+        httpStatus: status,
+      });
+      expect(String((caught as Error).message)).toContain("LLM_THINKING_MODE=provider_default");
+      expect(String((caught as Error).message)).not.toContain("PRIVATE_PROVIDER_DETAIL");
+      expect(fetcher).toHaveBeenCalledOnce();
+      const body = JSON.parse(String(vi.mocked(fetcher).mock.calls[0][1]?.body));
+      expect(body).toMatchObject({
+        model: "test-model",
+        thinking: { type: "disabled" },
+      });
+      expect(records).toHaveLength(1);
+      expect(records[0]).toMatchObject({
+        status: "failed",
+        provider: "llm_provider",
+        model: "test-model",
+        fallbackUsed: false,
+        metadata: { thinkingModeRequested: "disabled" },
+      });
+      expect(JSON.stringify(records)).not.toContain("PRIVATE_PROVIDER_DETAIL");
+    },
+  );
+
   it("omits response_format when JSON mode is disabled", async () => {
     const fetcher = vi.fn(async () => completion('{"ok":true}')) as typeof fetch;
     await client(fetcher, { LLM_JSON_MODE: "false" }).structuredCompletion(input());
@@ -283,6 +392,7 @@ describe("structured output", () => {
 
     expect(result.data).toEqual({ ok: true, message: "PRIVATE FINAL CONTENT" });
     expect(result.metadata.reasoningFieldPresent).toBe(true);
+    expect(result.metadata.thinkingModeRequested).toBe("provider_default");
     expect(result.metadata.responseSafetySummary).toMatchObject({
       responseId: "provider-id",
       choiceCount: 1,
@@ -293,7 +403,10 @@ describe("structured output", () => {
       contentByteLength: expect.any(Number),
       reasoningFieldPresent: true,
     });
-    expect(records[0].metadata).toMatchObject({ reasoningFieldPresent: true });
+    expect(records[0].metadata).toMatchObject({
+      reasoningFieldPresent: true,
+      thinkingModeRequested: "provider_default",
+    });
     expect(JSON.stringify(records)).not.toContain("PRIVATE REASONING MUST NOT BE STORED");
     expect(JSON.stringify(records)).not.toContain("PRIVATE FINAL CONTENT");
   });
@@ -707,6 +820,8 @@ describe("fallback, observation, and secret safety", () => {
     expect(serialized).not.toContain("another-secret");
     expect(serialized).not.toContain("PRIVATE COMPLETE PROMPT");
     expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("https://llm.example.test/v1");
+    expect(serialized).not.toContain("maxOutputTokens");
   });
 
   it("ignores observer failures", async () => {
