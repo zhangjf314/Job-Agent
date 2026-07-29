@@ -510,6 +510,57 @@ describe("structured output", () => {
     expect(invalidSchema).toHaveBeenCalledOnce();
   });
 
+  it("attaches and observes safe field-level schema diagnostics without raw values", async () => {
+    const records: Array<Parameters<LLMCallObserver["record"]>[0]> = [];
+    const observer: LLMCallObserver = { async record(record) { records.push(record); } };
+    const fetcher = vi.fn(async () => completion(JSON.stringify({
+      ok: false,
+      message: "PRIVATE MODEL FIELD VALUE",
+      PRIVATE_UNKNOWN_KEY: "PRIVATE UNKNOWN VALUE",
+    }), {
+      reasoningContent: "PRIVATE REASONING",
+    })) as typeof fetch;
+    let caught: unknown;
+    try {
+      await client(fetcher, {}, observer).structuredCompletion({
+        ...input(),
+        allowJsonRepair: false,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      code: "LLM_SCHEMA_VALIDATION_FAILED",
+      schemaDiagnosticSummary: {
+        schemaName: "tiny",
+        issueCount: 1,
+        reportedIssueCount: 1,
+        truncated: false,
+        issues: [{
+          category: "INVALID_LITERAL",
+          path: "ok",
+          expectedType: "literal",
+          receivedType: "boolean",
+        }],
+      },
+    });
+    expect(records[0].metadata).toMatchObject({
+      schemaName: "tiny",
+      schemaIssueCount: 1,
+      schemaReportedIssueCount: 1,
+      schemaIssuesTruncated: false,
+      schemaIssueCategories: ["INVALID_LITERAL"],
+      schemaIssuePaths: ["ok"],
+      schemaExpectedTypes: ["literal"],
+      schemaReceivedTypes: ["boolean"],
+    });
+    const serialized = JSON.stringify({ caught, records });
+    expect(serialized).not.toContain("PRIVATE MODEL FIELD VALUE");
+    expect(serialized).not.toContain("PRIVATE_UNKNOWN_KEY");
+    expect(serialized).not.toContain("PRIVATE UNKNOWN VALUE");
+    expect(serialized).not.toContain("PRIVATE REASONING");
+  });
+
   it("can disable transport retries independently", async () => {
     const fetcher = vi.fn(async () => new Response("", { status: 503 })) as typeof fetch;
     await expect(client(fetcher, { LLM_RETRY_COUNT: "3" }).structuredCompletion({

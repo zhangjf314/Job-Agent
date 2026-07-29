@@ -9,6 +9,7 @@ import {
   type LLMCompletionMetadata,
   type LLMResponseSafetySummary,
 } from "../services/ai/llm-client";
+import type { SafeSchemaDiagnosticSummary } from "../services/ai/schema-diagnostics";
 import { createDatabaseLLMCallObserver } from "../services/ai/llm-observability";
 import {
   careerStrategyOutputContract,
@@ -25,7 +26,11 @@ import {
   fictionalSmokeJob,
   fictionalSmokeProfile,
 } from "./llm-smoke-fixtures";
-import { parseSmokeArguments, smokeRequestBudget } from "./llm-smoke-selection";
+import {
+  parseSmokeArguments,
+  smokeRequestBudget,
+  smokeRequestPolicy,
+} from "./llm-smoke-selection";
 import { createSmokeRequestLimiter } from "./llm-smoke-request-limit";
 
 async function main() {
@@ -88,6 +93,8 @@ async function main() {
     finalizationRetryCount?: number;
     externalRequestCount?: number;
     latencyMs?: number;
+    schemaDiagnosticSummary?: SafeSchemaDiagnosticSummary;
+    additionalRepairBlockedByRequestLimit?: boolean;
   };
   const summaries: SmokeSummary[] = [];
 
@@ -137,6 +144,12 @@ async function main() {
         externalRequestCount:
           error instanceof LLMClientError ? error.externalRequestCount : undefined,
         latencyMs: error instanceof LLMClientError ? error.latencyMs : undefined,
+        schemaDiagnosticSummary:
+          error instanceof LLMClientError ? error.schemaDiagnosticSummary : undefined,
+        additionalRepairBlockedByRequestLimit:
+          explicitMaxExternalRequests !== undefined &&
+          error instanceof LLMClientError &&
+          error.code === "LLM_SCHEMA_VALIDATION_FAILED",
       });
       throw error;
     }
@@ -178,14 +191,7 @@ async function main() {
           profile: fictionalSmokeProfile,
           baseResumeMarkdown: fictionalSmokeBaseResume,
           jdAnalysis: jd,
-          requestPolicy: explicitMaxExternalRequests === undefined
-            ? undefined
-            : {
-                allowTransportRetry: false,
-                allowJsonRepair: false,
-                allowFactualityRepair: false,
-                allowFinalizationRetry: true,
-              },
+          requestPolicy: smokeRequestPolicy(explicitMaxExternalRequests),
         });
         summaries.push({
           name: "Tailored resume",
@@ -223,6 +229,12 @@ async function main() {
           externalRequestCount:
             error instanceof LLMClientError ? error.externalRequestCount : externalRequests,
           latencyMs: error instanceof LLMClientError ? error.latencyMs : undefined,
+          schemaDiagnosticSummary:
+            error instanceof LLMClientError ? error.schemaDiagnosticSummary : undefined,
+          additionalRepairBlockedByRequestLimit:
+            explicitMaxExternalRequests !== undefined &&
+            error instanceof LLMClientError &&
+            error.code === "LLM_SCHEMA_VALIDATION_FAILED",
         });
         throw error;
       }
@@ -304,6 +316,9 @@ async function main() {
       contentByteLength: responseSummary?.contentByteLength,
       finishReason: responseSummary?.finishReason,
       outputLimitReached: responseSummary?.outputLimitReached,
+      schemaDiagnostics: summary.schemaDiagnosticSummary,
+      additionalRepairBlockedByRequestLimit:
+        summary.additionalRepairBlockedByRequestLimit,
       violationCategories: summary.factualityViolationCategories,
       errorCategory: summary.errorCategory,
     }));

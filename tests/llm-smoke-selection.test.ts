@@ -4,6 +4,7 @@ import {
   parseSmokeSelection,
   smokeCases,
   smokeRequestBudget,
+  smokeRequestPolicy,
 } from "@/scripts/llm-smoke-selection";
 import { createSmokeRequestLimiter } from "@/scripts/llm-smoke-request-limit";
 
@@ -65,5 +66,21 @@ describe("LLM smoke selection", () => {
       retryable: false,
     });
     expect(transport).toHaveBeenCalledOnce();
+  });
+
+  it("reserves finalization only when an explicit budget has a second request", () => {
+    expect(smokeRequestPolicy(1)).toEqual({
+      allowTransportRetry: false,
+      allowJsonRepair: false,
+      allowFactualityRepair: false,
+      allowFinalizationRetry: false,
+    });
+    expect(smokeRequestPolicy(2)).toEqual({
+      allowTransportRetry: false,
+      allowJsonRepair: false,
+      allowFactualityRepair: false,
+      allowFinalizationRetry: true,
+    });
+    expect(smokeRequestPolicy()).toBeUndefined();
   });
 });
