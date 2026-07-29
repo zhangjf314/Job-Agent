@@ -19,7 +19,7 @@ import {
 } from "@/services/ai/tailored-resume-factuality";
 import {
   buildGroundedTailoredResumeMessages,
-  LLMTailoredResumeWriterProvider,
+  LegacyFullGroundedTailoredResumeWriterProvider,
   MockTailoredResumeWriterProvider,
 } from "@/services/ai/tailored-resume-writer";
 import type { LLMClient, LLMCompletionMetadata } from "@/services/ai/llm-client";
@@ -374,7 +374,7 @@ describe("factuality repair and safety", () => {
       recordSafeObservation: vi.fn(),
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient);
     const output = await provider.write({ profile: profile(), baseResumeMarkdown: "", jdAnalysis: jd() });
     expect(output.diagnostics.factualityStatus).toBe("pass");
     expect(output.diagnostics.factualityRepairCount).toBe(1);
@@ -500,7 +500,7 @@ describe("factuality repair and safety", () => {
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
     const fallback = { write: vi.fn(new MockTailoredResumeWriterProvider().write.bind(new MockTailoredResumeWriterProvider())) };
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient, fallback, true);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient, fallback, true);
     await expect(provider.write({ profile: profile(), baseResumeMarkdown: "", jdAnalysis: jd() }))
       .rejects.toBeInstanceOf(TailoredResumeFactualityError);
     expect(vi.mocked(fakeClient.structuredCompletion)).toHaveBeenCalledTimes(2);
@@ -542,7 +542,7 @@ describe("factuality repair and safety", () => {
       recordSafeObservation: vi.fn(),
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient);
 
     let caught: TailoredResumeFactualityError | undefined;
     try {
@@ -593,7 +593,7 @@ describe("factuality repair and safety", () => {
       recordSafeObservation: vi.fn(),
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient);
     await expect(provider.write({
       profile: profile(),
       baseResumeMarkdown: "",
@@ -621,7 +621,7 @@ describe("factuality repair and safety", () => {
       recordFallback: vi.fn(),
     } as unknown as LLMClient;
     const fallback = { write: vi.fn(new MockTailoredResumeWriterProvider().write.bind(new MockTailoredResumeWriterProvider())) };
-    const provider = new LLMTailoredResumeWriterProvider(fakeClient, fallback, true);
+    const provider = new LegacyFullGroundedTailoredResumeWriterProvider(fakeClient, fallback, true);
     await expect(provider.write({ profile: profile(), baseResumeMarkdown: "", jdAnalysis: jd() }))
       .rejects.toThrow("structural failure");
     expect(fallback.write).not.toHaveBeenCalled();

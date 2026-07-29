@@ -8,12 +8,12 @@ describe("tailored-resume pipeline stage statuses", () => {
     [
       "JSON failure",
       { success: false, errorCategory: "LLM_STRUCTURED_OUTPUT_INVALID" },
-      ["failed", "not_reached", "not_reached", "not_reached"],
+      ["failed", "not_reached", "not_reached", "not_reached", "not_reached", "not_reached", "not_reached", "not_reached"],
     ],
     [
       "normalization failure",
       { success: false, errorCategory: "GROUNDED_NORMALIZATION_FAILED" },
-      ["passed", "failed", "not_reached", "not_reached"],
+      ["passed", "passed", "passed", "failed", "passed", "failed", "not_reached", "not_reached"],
     ],
     [
       "schema failure after normalization",
@@ -22,21 +22,25 @@ describe("tailored-resume pipeline stage statuses", () => {
         errorCategory: "LLM_SCHEMA_VALIDATION_FAILED",
         normalizationSummaryPresent: true,
       },
-      ["passed", "passed", "failed", "not_reached"],
+      ["passed", "failed", "not_reached", "not_reached", "not_reached", "not_reached", "not_reached", "not_reached"],
     ],
     [
       "factuality failure",
       { success: false, factualityStatus: "fail" as const },
-      ["passed", "passed", "passed", "failed"],
+      ["passed", "passed", "passed", "passed", "passed", "passed", "passed", "failed"],
     ],
     [
       "success",
       { success: true },
-      ["passed", "passed", "passed", "passed"],
+      ["passed", "passed", "passed", "passed", "passed", "passed", "passed", "passed"],
     ],
   ])("reports %s without collapsing earlier stages", (_name, input, expected) => {
     const statuses = tailoredResumePipelineStageStatuses(input);
     expect([
+      statuses.planJsonStatus,
+      statuses.planSchemaStatus,
+      statuses.planValidationStatus,
+      statuses.compilerStatus,
       statuses.jsonStatus,
       statuses.normalizationStatus,
       statuses.schemaStatus,

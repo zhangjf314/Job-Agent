@@ -227,7 +227,7 @@ async function main() {
         });
       } catch (error) {
         const factualityDiagnostics =
-          error instanceof TailoredResumeFactualityError
+          error && typeof error === "object" && "diagnostics" in error
             ? error.diagnostics as TailoredResumeDiagnostics | undefined
             : undefined;
         const report = error && typeof error === "object" && "report" in error
@@ -239,6 +239,9 @@ async function main() {
           errorCategory: error instanceof LLMClientError
             ? error.code
             : error instanceof TailoredResumeFactualityError
+              ? error.code
+            : error && typeof error === "object" && "code" in error &&
+                typeof error.code === "string"
               ? error.code
             : error instanceof Error ? error.name : "provider_error",
           diagnostics: factualityDiagnostics,
@@ -339,6 +342,11 @@ async function main() {
       estimatedCostMicros: summary.metadata?.estimatedCostMicros,
       costCurrency: summary.metadata?.priceCurrency,
       fallbackUsed: false,
+      planJsonStatus: pipelineStages?.planJsonStatus,
+      planSchemaStatus: pipelineStages?.planSchemaStatus,
+      planValidationStatus: pipelineStages?.planValidationStatus,
+      compilerStatus: pipelineStages?.compilerStatus,
+      jsonStatus: pipelineStages?.jsonStatus,
       jsonParse: pipelineStages?.jsonStatus ??
         (summary.success ? "passed" : undefined),
       schemaValidation:
@@ -349,10 +357,34 @@ async function main() {
             ? "not_reached"
             : "failed",
       groundedSchemaStatus: pipelineStages?.schemaStatus,
+      schemaStatus: pipelineStages?.schemaStatus,
       schemaIssueCount:
         summary.schemaDiagnosticSummary?.issueCount ??
         (summary.diagnostics || summary.success ? 0 : undefined),
       factualityStatus: pipelineStages?.factualityStatus,
+      factualityViolationCount:
+        summary.diagnostics?.factualityViolationCount,
+      selectedFactCount: summary.diagnostics?.selectedFactCount,
+      renderedFactCount: summary.diagnostics?.renderedFactCount,
+      omittedFactCount: summary.diagnostics?.omittedFactCount,
+      unrenderableFactCount:
+        summary.diagnostics?.unrenderableFactCount,
+      sectionFactSelectionCounts:
+        summary.diagnostics?.sectionFactSelectionCounts,
+      compilerSectionLineCounts:
+        summary.diagnostics?.compilerSectionLineCounts,
+      compilerMaximumLineLength:
+        summary.diagnostics?.compilerMaximumLineLength,
+      maximumLineLength:
+        summary.diagnostics?.compilerMaximumLineLength,
+      compilerMaximumSourceFactIds:
+        summary.diagnostics?.compilerMaximumSourceFactIds,
+      maximumSourceFactIds:
+        summary.diagnostics?.compilerMaximumSourceFactIds,
+      applicationMaterialLineCounts:
+        summary.diagnostics?.applicationMaterialLineCounts,
+      applicationMaterialsIssues:
+        summary.diagnostics?.compilerStatus === "passed" ? 0 : undefined,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,
       factualityViolationCountBeforeRepair:
         summary.diagnostics?.factualityViolationCountBeforeRepair,
@@ -440,6 +472,7 @@ async function main() {
       ungroundedClaimCount: summary.diagnostics?.ungroundedClaimCount,
       unknownFactIds: summary.diagnostics?.unknownFactIds,
       missingSourceIds: summary.diagnostics?.missingSourceIds,
+      missingFactSources: summary.diagnostics?.missingSourceIds,
       groundedNormalizationApplied:
         summary.diagnostics?.groundedNormalizationApplied ??
         summary.metadata?.groundedNormalizationSummary?.groundedNormalizationApplied ??
@@ -545,6 +578,9 @@ async function main() {
         summary.metadata?.groundedNormalizationSummary
           ?.rewriteExplanationReceivedType ??
         summary.groundedNormalizationSummary?.rewriteExplanationReceivedType,
+      rewriteExplanationType:
+        summary.diagnostics?.rewriteExplanationReceivedType ??
+        summary.groundedNormalizationSummary?.rewriteExplanationReceivedType,
       rewriteExplanationCount:
         summary.diagnostics?.rewriteExplanationCount ??
         summary.metadata?.groundedNormalizationSummary
@@ -608,6 +644,10 @@ async function main() {
       inventedAward:
         summary.factualityViolationCategories?.includes("INVENTED_AWARD") ??
         (summary.diagnostics ? false : undefined),
+      jdRequirementAsFact:
+        summary.factualityViolationCategories?.includes(
+          "JD_REQUIREMENT_AS_FACT",
+        ) ?? (summary.diagnostics ? false : undefined),
       inventedAIProject:
         summary.factualityViolationCategories?.includes(
           "INVENTED_AI_PROJECT",
@@ -616,19 +656,20 @@ async function main() {
         summary.factualityViolationCategories?.includes(
           "INVENTED_LLM_EXPERIENCE",
         ) ?? (summary.diagnostics ? false : undefined),
-      inventedMetric:
-        summary.factualityViolationCategories?.includes("INVENTED_METRIC") ??
-        (summary.diagnostics ? false : undefined),
       unsupportedSkill:
-        summary.factualityViolationCategories?.includes("UNSUPPORTED_SKILL") ??
-        (summary.diagnostics ? false : undefined),
-      jdRequirementRepresentedAsFact:
         summary.factualityViolationCategories?.includes(
-          "JD_REQUIREMENT_AS_FACT",
+          "UNSUPPORTED_SKILL",
         ) ?? (summary.diagnostics ? false : undefined),
       factStrengthEscalation:
         summary.factualityViolationCategories?.includes(
           "FACT_STRENGTH_ESCALATION",
+        ) ?? (summary.diagnostics ? false : undefined),
+      inventedMetric:
+        summary.factualityViolationCategories?.includes("INVENTED_METRIC") ??
+        (summary.diagnostics ? false : undefined),
+      jdRequirementRepresentedAsFact:
+        summary.factualityViolationCategories?.includes(
+          "JD_REQUIREMENT_AS_FACT",
         ) ?? (summary.diagnostics ? false : undefined),
       errorCategory: summary.errorCategory,
       schemaBusinessErrorCategory: classifyGroundedSchemaFailure(

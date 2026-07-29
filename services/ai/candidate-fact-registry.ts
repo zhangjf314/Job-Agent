@@ -1,5 +1,8 @@
 import type { ResumeProfile } from "@/services/resume-generator";
 import type { JDAnalysisResult } from "@/types/jd";
+import type {
+  GROUNDED_SECTION_TYPES_BY_POSITION,
+} from "./grounded-tailored-resume-contract";
 
 export type CandidateFactCategory =
   | "education"
@@ -18,6 +21,19 @@ export type CandidateFact = {
   category: CandidateFactCategory;
   text: string;
   canonicalTerms: string[];
+};
+
+export type GroundedSectionType =
+  (typeof GROUNDED_SECTION_TYPES_BY_POSITION)[number];
+
+export type CandidateFactRenderDescriptor = {
+  factId: string;
+  category: CandidateFactCategory;
+  shortLabel: string;
+  safePhrase: string;
+  sectionEligibility: GroundedSectionType[];
+  renderGroup: string;
+  renderable: boolean;
 };
 
 export type JobRequirementFact = {
@@ -181,4 +197,62 @@ export function formatFactRegistryForPrompt(facts: CandidateFact[]) {
 
 export function formatJobRequirementsForPrompt(facts: JobRequirementFact[]) {
   return facts.map((fact) => `[${fact.id}] ${fact.text}`).join("\n");
+}
+
+const sectionEligibilityByCategory: Record<
+  CandidateFactCategory,
+  GroundedSectionType[]
+> = {
+  education: ["summary", "education"],
+  skill: ["summary", "skills"],
+  project: ["summary", "projects"],
+  project_technology: ["summary", "skills", "projects"],
+  project_responsibility: ["summary", "projects"],
+  employment: ["summary", "experiences"],
+  internship: ["summary", "experiences"],
+  award: ["summary", "others"],
+  metric: ["summary", "projects", "experiences", "others"],
+  achievement: ["summary", "projects", "experiences", "others"],
+};
+
+function renderGroup(category: CandidateFactCategory) {
+  if (category === "skill" || category === "project_technology") {
+    return "skills";
+  }
+  if (
+    category === "project" ||
+    category === "project_responsibility" ||
+    category === "metric" ||
+    category === "achievement"
+  ) {
+    return "projects";
+  }
+  if (category === "employment" || category === "internship") {
+    return "experiences";
+  }
+  return category;
+}
+
+/**
+ * Builds non-persistent render metadata exclusively from the structured
+ * candidate registry. JD text and model output are intentionally absent.
+ */
+export function buildCandidateFactRenderDescriptors(
+  facts: CandidateFact[],
+): CandidateFactRenderDescriptor[] {
+  return facts.map((fact) => {
+    const safePhrase = clean(fact.text);
+    return {
+      factId: fact.id,
+      category: fact.category,
+      shortLabel: fact.category,
+      safePhrase,
+      sectionEligibility: [...sectionEligibilityByCategory[fact.category]],
+      renderGroup: renderGroup(fact.category),
+      renderable:
+        safePhrase.length > 0 &&
+        safePhrase.length <= 80 &&
+        !/[\r\n]/.test(safePhrase),
+    };
+  });
 }
