@@ -188,6 +188,14 @@ npm run seed             # 重建虚构 Demo 数据
 
 路线图中的能力尚未完成，不应视为当前功能。
 
+## LLM thinking mode
+
+`LLM_THINKING_MODE` defaults to `provider_default`. Use `enabled` or `disabled`
+only when the configured provider explicitly supports the optional parameter.
+Disabling thinking does not disable JSON Mode, and returned reasoning content is
+never used as business output. Keep real configuration only in the untracked
+`.env` file; CI remains on Mock AI.
+
 ## License
 
 当前仓库暂未附加开源许可证。在确认全部源码和四份简历模板的再许可权之前，不声明可自由复制、修改或再分发。

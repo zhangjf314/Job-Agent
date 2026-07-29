@@ -15,6 +15,7 @@ import {
 export type LLMErrorCode =
   | "invalid_configuration"
   | "bad_request"
+  | "THINKING_PARAMETER_UNSUPPORTED"
   | "authentication_failed"
   | "forbidden"
   | "not_found"
@@ -126,6 +127,7 @@ export type LLMCompletionMetadata = {
   finalizationRetryCount: number;
   externalRequestCount: number;
   reasoningFieldPresent: boolean;
+  thinkingModeRequested: AIConfig["thinkingMode"];
   responseSafetySummary: LLMResponseSafetySummary;
   estimatedCostMicros?: number;
   priceCurrency?: string;
@@ -417,6 +419,7 @@ export class LLMClient {
         finalizationRetryCount,
         externalRequestCount,
         reasoningFieldPresent,
+        thinkingModeRequested: this.config.thinkingMode,
         responseSafetySummary: latestResponseSummary!,
         estimatedCostMicros,
         priceCurrency: estimatedCostMicros === undefined ? undefined : this.config.priceCurrency,
@@ -442,6 +445,7 @@ export class LLMClient {
           finalizationRetryCount,
           externalRequestCount,
           reasoningFieldPresent,
+          thinkingModeRequested: this.config.thinkingMode,
           httpStatus,
           ...responseMetadata(latestResponseSummary),
           priceCurrency: metadata.priceCurrency,
@@ -490,6 +494,7 @@ export class LLMClient {
           finalizationRetryCount,
           externalRequestCount,
           reasoningFieldPresent,
+          thinkingModeRequested: this.config.thinkingMode,
           httpStatus: normalized.httpStatus ?? httpStatus,
           ...responseMetadata(latestResponseSummary),
           ...safeSchemaDiagnosticMetadata(normalized.schemaDiagnosticSummary),
@@ -520,6 +525,7 @@ export class LLMClient {
         providerRequested: "llm_provider",
         providerUsed: "mock",
         fallbackReason: normalized.code,
+        thinkingModeRequested: this.config.thinkingMode,
       },
     });
   }
@@ -605,6 +611,7 @@ export class LLMClient {
           model: this.config.model,
           temperature: input.temperature ?? this.config.temperature,
           max_tokens: input.maxOutputTokens ?? this.config.maxOutputTokens,
+          stream: false,
           messages: [
             ...messages,
             {
@@ -625,6 +632,9 @@ export class LLMClient {
                   : { type: "json_object" },
               }
             : {}),
+          ...(this.config.thinkingMode === "provider_default"
+            ? {}
+            : { thinking: { type: this.config.thinkingMode } }),
         }),
       });
 
@@ -709,10 +719,23 @@ export class LLMClient {
     }
   }
 
-  private httpError(status: number, _body: string, requestId?: string) {
-    if (status === 400) {
+  private httpError(status: number, body: string, requestId?: string) {
+    if (
+      (status === 400 || status === 422) &&
+      this.config.thinkingMode !== "provider_default" &&
+      /\bthinking\b/i.test(body)
+    ) {
+      return new LLMClientError(
+        "THINKING_PARAMETER_UNSUPPORTED",
+        "The current provider rejected the configured thinking mode parameter. Check provider support or set LLM_THINKING_MODE=provider_default.",
+        false,
+        status,
+        requestId,
+      );
+    }
+    if (status === 400 || status === 422) {
       const hint = this.config.jsonMode ? " If the provider does not support response_format, set LLM_JSON_MODE=false." : "";
-      return new LLMClientError("bad_request", `LLM provider rejected the request (HTTP 400).${hint}`, false, status, requestId);
+      return new LLMClientError("bad_request", `LLM provider rejected the request (HTTP ${status}).${hint}`, false, status, requestId);
     }
     if (status === 401) return new LLMClientError("authentication_failed", "LLM authentication failed. Check LLM_API_KEY.", false, status, requestId);
     if (status === 403) return new LLMClientError("forbidden", "LLM provider denied this request (HTTP 403).", false, status, requestId);

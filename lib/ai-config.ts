@@ -1,4 +1,5 @@
 export type AIProviderMode = "mock" | "llm_provider";
+export type LLMThinkingMode = "provider_default" | "enabled" | "disabled";
 
 export type AIConfig = {
   provider: AIProviderMode;
@@ -10,6 +11,7 @@ export type AIConfig = {
   maxOutputTokens: number;
   retryCount: number;
   jsonMode: boolean;
+  thinkingMode: LLMThinkingMode;
   fallbackToMock: boolean;
   priceCurrency: string;
   inputPricePerMillion?: number;
@@ -42,6 +44,20 @@ function booleanValue(value: string | undefined, fallback: boolean) {
   return value.toLowerCase() === "true";
 }
 
+function thinkingModeValue(value: string | undefined): LLMThinkingMode {
+  const normalized = value?.trim() || "provider_default";
+  if (
+    normalized === "provider_default" ||
+    normalized === "enabled" ||
+    normalized === "disabled"
+  ) {
+    return normalized;
+  }
+  throw new AIConfigurationError([
+    "LLM_THINKING_MODE must be provider_default, enabled, or disabled",
+  ]);
+}
+
 function normalizeBaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "");
 }
@@ -57,6 +73,7 @@ export function getAIConfig(env: Partial<NodeJS.ProcessEnv> = process.env): AICo
     maxOutputTokens: numberValue(env.LLM_MAX_OUTPUT_TOKENS, 1600),
     retryCount: numberValue(env.LLM_RETRY_COUNT, 2),
     jsonMode: booleanValue(env.LLM_JSON_MODE, true),
+    thinkingMode: thinkingModeValue(env.LLM_THINKING_MODE),
     fallbackToMock: booleanValue(env.LLM_FALLBACK_TO_MOCK, false),
     priceCurrency: (env.LLM_PRICE_CURRENCY || "USD").trim().toUpperCase(),
     inputPricePerMillion: optionalNumber(env.LLM_INPUT_PRICE_PER_MILLION),
@@ -153,6 +170,7 @@ export function publicAIConfig(config = getAIConfig()) {
     maxOutputTokens: config.maxOutputTokens,
     retryCount: config.retryCount,
     jsonMode: config.jsonMode,
+    thinkingMode: config.thinkingMode,
     fallbackToMock: config.fallbackToMock,
     hasCostEstimation:
       config.inputPricePerMillion !== undefined && config.outputPricePerMillion !== undefined,

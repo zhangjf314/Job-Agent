@@ -279,6 +279,7 @@ async function main() {
       providerRequested: "llm_provider",
       providerUsed: "llm_provider",
       model: config.model,
+      thinkingModeRequested: config.thinkingMode,
       requestId: summary.metadata?.requestId,
       latencyMs:
         summary.diagnostics?.latencyMs ??

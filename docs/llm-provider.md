@@ -32,18 +32,27 @@ LLM_TEMPERATURE=0.2
 LLM_MAX_OUTPUT_TOKENS=1600
 LLM_RETRY_COUNT=2
 LLM_JSON_MODE=true
+LLM_THINKING_MODE=provider_default
 LLM_FALLBACK_TO_MOCK=false
 ```
 
 `LLM_RETRY_COUNT` is the number of additional attempts after the initial
 request. Network errors, HTTP 408, 429, and 5xx responses are retried with
-bounded exponential backoff and jitter. HTTP 400, 401, 403, and 404 are not
+bounded exponential backoff and jitter. HTTP 400, 401, 403, 404, and 422 are not
 retried. Each request is cancelled with `AbortController` at the configured
 timeout.
 
 When `LLM_JSON_MODE=true`, the client sends
 `response_format: {"type":"json_object"}`. Set it to `false` if a compatible
 provider rejects that option; prompts and Zod validation remain active.
+
+`LLM_THINKING_MODE=provider_default` is the safe, compatible default and omits
+the optional `thinking` request field. Use `enabled` or `disabled` only when the
+configured provider explicitly supports that parameter. For concise,
+strictly-structured JSON tasks with DeepSeek V4, `LLM_THINKING_MODE=disabled`
+can prevent reasoning output from consuming the final-output token budget.
+Disabling thinking does not disable JSON mode. Any returned
+`reasoning_content` is discarded and is never used as business output.
 
 Mock fallback is deliberately off by default. With
 `LLM_FALLBACK_TO_MOCK=false`, a real-provider error is surfaced. If explicitly
@@ -100,6 +109,9 @@ CI remains fully offline with Mock AI.
 - `429`: check provider quota/rate limits; the client performs only bounded retries.
 - `timeout`: increase `LLM_TIMEOUT_MS` only after checking endpoint latency/network.
 - `400` mentioning `response_format`: set `LLM_JSON_MODE=false`.
+- `400` or `422` mentioning `thinking`: verify provider support or set
+  `LLM_THINKING_MODE=provider_default`; the client never removes the parameter
+  and retries silently.
 - malformed JSON: one repair is attempted, then a structured-output error is returned.
 - schema failure: compare provider capability with the selected business schema;
   invalid data is never cast into the business layer.

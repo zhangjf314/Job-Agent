@@ -9,6 +9,12 @@ function providerLabel(value: string) {
   return value;
 }
 
+function thinkingModeLabel(value: string) {
+  if (value === "enabled") return "Enabled";
+  if (value === "disabled") return "Disabled";
+  return "Provider default";
+}
+
 export default function AISettingsPage() {
   const config = publicAIConfig();
   return (
@@ -43,6 +49,7 @@ export default function AISettingsPage() {
               当前为 Mock 模式，测试按钮不会向外部服务发送请求。
             </p>
           ) : null}
+          <div>Thinking mode: {thinkingModeLabel(config.thinkingMode)}</div>
           <AITestControls />
         </CardContent>
       </Card>
