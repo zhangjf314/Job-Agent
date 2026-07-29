@@ -5,6 +5,7 @@ import {
   TailoredResumeFactualityError,
   type FactualityReport,
 } from "@/services/ai/tailored-resume-factuality";
+import { LLMClientError } from "@/services/ai/llm-client";
 
 const providerMocks = vi.hoisted(() => ({
   analyze: vi.fn(),
@@ -108,6 +109,59 @@ describe("JD service factuality save gate", () => {
     )).rejects.toMatchObject({ code: "TAILORED_RESUME_FACTUALITY_VIOLATION" });
 
     expect(analysisCreate).toHaveBeenCalledTimes(1);
+    expect(resumeCreate).not.toHaveBeenCalled();
+    expect(tailoredCreate).not.toHaveBeenCalled();
+  });
+
+  it("does not save after a rewriteExplanation schema failure", async () => {
+    const resumeCreate = vi.fn();
+    const tailoredCreate = vi.fn();
+    const db = {
+      careerProfile: { findUniqueOrThrow: vi.fn(async () => profile()) },
+      resume: {
+        findUniqueOrThrow: vi.fn(async () => ({
+          id: "resume_1",
+          profileId: "profile_1",
+          title: "Base resume",
+          targetCity: "",
+          templateKey: "classic",
+          contentMarkdown: "Java Spring Boot MySQL",
+          sections: [],
+          profile: profile(),
+        })),
+        updateMany: vi.fn(),
+        create: resumeCreate,
+      },
+      jobDescription: {
+        findUniqueOrThrow: vi.fn(async () => ({
+          id: "jd_1",
+          profileId: "profile_1",
+          title: "Java developer",
+          city: "",
+          rawText: "Java Spring Boot MySQL internship",
+        })),
+      },
+      jDAnalysis: {
+        create: vi.fn(async ({ data }) => ({ id: "analysis_1", ...data })),
+      },
+      tailoredResume: { create: tailoredCreate },
+    };
+    providerMocks.analyze.mockResolvedValue(
+      analyzeJDText("Java Spring Boot MySQL internship"),
+    );
+    providerMocks.write.mockRejectedValue(
+      new LLMClientError(
+        "LLM_SCHEMA_VALIDATION_FAILED",
+        "LLM structured output does not match the required schema.",
+      ),
+    );
+
+    await expect(generateTailoredResume(
+      "profile_1",
+      "resume_1",
+      "jd_1",
+      db as never,
+    )).rejects.toMatchObject({ code: "LLM_SCHEMA_VALIDATION_FAILED" });
     expect(resumeCreate).not.toHaveBeenCalled();
     expect(tailoredCreate).not.toHaveBeenCalled();
   });

@@ -103,6 +103,12 @@ candidate fact registry, while unknown and `J_REQ_*` IDs fail the factuality
 gate. Unknown object fields are rejected rather than recursively coerced or
 passed through.
 
+`rewriteExplanation` is a strict JSON string array with zero to two concise,
+non-empty items. A single string, `null`, an object, or more than two items
+fails the Grounded schema; the normalizer never wraps, splits, truncates, or
+otherwise rewrites this field. Safe observation stores only its received type,
+count when it is an array, and the shared limit—never explanation text.
+
 The three application-material arrays remain required and non-empty because
 the unchanged public business schema requires non-empty strings. Missing,
 `null`, or wrongly typed material arrays are not synthesized or coerced and

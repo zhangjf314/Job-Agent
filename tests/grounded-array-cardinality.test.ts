@@ -74,6 +74,8 @@ describe("Grounded array cardinality contracts", () => {
     expect(GROUNDED_TAILORED_RESUME_LIMITS).toEqual({
       changedSectionsMax: 2,
       sourceFactIdsMax: 8,
+      rewriteExplanationMax: 2,
+      rewriteExplanationItemMinChars: 1,
     });
     const contract = buildGroundedArrayCardinalityOutputContract();
     expect(contract).toContain("changedSections:0..2 unique canonical");

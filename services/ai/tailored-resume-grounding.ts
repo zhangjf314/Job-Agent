@@ -4,6 +4,7 @@ import type { TailoredResumeResult } from "@/types/jd";
 import {
   buildGroundedArrayCardinalityOutputContract,
   buildGroundedSectionOutputContract,
+  buildRewriteExplanationOutputContract,
   GROUNDED_SECTION_COUNT,
   GROUNDED_SECTION_TYPES_BY_POSITION,
   GROUNDED_TAILORED_RESUME_LIMITS,
@@ -33,7 +34,11 @@ export const groundedApplicationMaterialsSchema = z.object({
 
 export const groundedTailoredResumeSchema = z.object({
   sections: z.array(groundedSectionSchema).length(GROUNDED_SECTION_COUNT),
-  rewriteExplanation: z.array(z.string().trim().min(1)).max(2),
+  rewriteExplanation: z.array(
+    z.string().trim().min(
+      GROUNDED_TAILORED_RESUME_LIMITS.rewriteExplanationItemMinChars,
+    ),
+  ).max(GROUNDED_TAILORED_RESUME_LIMITS.rewriteExplanationMax),
   changedSections: z.array(z.enum(GROUNDED_SECTION_TYPES_BY_POSITION))
     .max(GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax)
     .refine((values) => new Set(values).size === values.length, {
@@ -94,12 +99,13 @@ export function groundedClaimEntries(input: GroundedTailoredResume) {
 }
 
 export const groundedTailoredResumeOutputContract = [
-  "Return compact JSON with sections,rewriteExplanation,changedSections,missingFields,improvementQuestions,qualityWarnings,applicationMaterials.",
+  "keys:sections,rewriteExplanation,changedSections,missingFields,improvementQuestions,qualityWarnings,applicationMaterials.",
   buildGroundedSectionOutputContract(),
   "GroundedText:{text:max80 Chinese chars,sourceFactIds,kind:fact|goal|format}.",
   buildGroundedArrayCardinalityOutputContract(),
+  buildRewriteExplanationOutputContract(),
   "Every factual line uses kind=fact and supplied candidate evidence.",
   "kind=goal must state target/plan/hope/learning/future; kind=format is only heading/label.",
-  "Other arrays:0..2 short strings. applicationMaterials require selfIntroduction,applicationEmail,recruiterMessage, each 1..2 GroundedText.",
-  "Concise JSON only; <=1600 output tokens.",
+  "missingFields,improvementQuestions,qualityWarnings:0..2 short strings. applicationMaterials require selfIntroduction,applicationEmail,recruiterMessage, each 1..2 GroundedText.",
+  "JSON only; <=1600 tokens.",
 ].join(" ");

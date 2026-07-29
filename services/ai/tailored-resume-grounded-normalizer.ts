@@ -6,6 +6,8 @@ import {
   GROUNDED_SECTION_TYPES_BY_POSITION,
   GROUNDED_TAILORED_RESUME_LIMITS,
   GROUNDED_TEXT_KEYS,
+  rewriteExplanationReceivedType,
+  type RewriteExplanationReceivedType,
 } from "./grounded-tailored-resume-contract";
 
 export {
@@ -21,6 +23,9 @@ export type GroundedNormalizationSummary = {
   canonicalizedSectionTypes: number;
   canonicalizedSectionOrders: number;
   deduplicatedFactIdCount: number;
+  rewriteExplanationCount: number | null;
+  rewriteExplanationLimit: number;
+  rewriteExplanationReceivedType: RewriteExplanationReceivedType;
   changedSectionsCount: number | null;
   maximumSourceFactIdsObserved: number | null;
   changedSectionsLimit: number;
@@ -89,6 +94,10 @@ export function normalizeGroundedTailoredResume(
     canonicalizedSectionTypes: 0,
     canonicalizedSectionOrders: 0,
     deduplicatedFactIdCount: 0,
+    rewriteExplanationCount: null,
+    rewriteExplanationLimit:
+      GROUNDED_TAILORED_RESUME_LIMITS.rewriteExplanationMax,
+    rewriteExplanationReceivedType: "other",
     changedSectionsCount: null,
     maximumSourceFactIdsObserved: null,
     changedSectionsLimit:
@@ -100,6 +109,11 @@ export function normalizeGroundedTailoredResume(
   assertAllowedKeys(value, GROUNDED_ROOT_KEYS);
 
   let normalized: Record<string, unknown> = value;
+  summary.rewriteExplanationReceivedType =
+    rewriteExplanationReceivedType(normalized.rewriteExplanation);
+  if (Array.isArray(normalized.rewriteExplanation)) {
+    summary.rewriteExplanationCount = normalized.rewriteExplanation.length;
+  }
 
   if (Array.isArray(value.sections)) {
     const sections = value.sections.map((section, index) => {
@@ -189,6 +203,10 @@ export function safeGroundedNormalizationMetadata(
     canonicalizedSectionTypeCount: summary.canonicalizedSectionTypes,
     canonicalizedSectionOrderCount: summary.canonicalizedSectionOrders,
     deduplicatedSourceFactIdCount: summary.deduplicatedFactIdCount,
+    rewriteExplanationReceivedType:
+      summary.rewriteExplanationReceivedType,
+    rewriteExplanationCount: summary.rewriteExplanationCount,
+    rewriteExplanationLimit: summary.rewriteExplanationLimit,
     changedSectionsCount: summary.changedSectionsCount,
     maximumChangedSections: summary.changedSectionsLimit,
     maximumSourceFactIdsObserved: summary.maximumSourceFactIdsObserved,

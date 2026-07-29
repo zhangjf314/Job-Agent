@@ -32,6 +32,9 @@ import {
   GROUNDED_TAILORED_RESUME_LIMITS,
   normalizeGroundedTailoredResume,
 } from "./tailored-resume-grounded-normalizer";
+import type {
+  RewriteExplanationReceivedType,
+} from "./grounded-tailored-resume-contract";
 
 export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
@@ -69,6 +72,9 @@ export type TailoredResumeDiagnostics = {
   canonicalizedSectionTypeCount: number;
   canonicalizedSectionOrderCount: number;
   deduplicatedSourceFactIdCount: number;
+  rewriteExplanationReceivedType: RewriteExplanationReceivedType;
+  rewriteExplanationCount: number | null;
+  rewriteExplanationLimit: number;
   changedSectionsCount: number | null;
   maximumChangedSections: number;
   maximumSourceFactIdsObserved: number | null;
@@ -115,6 +121,10 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         canonicalizedSectionTypeCount: 0,
         canonicalizedSectionOrderCount: 0,
         deduplicatedSourceFactIdCount: 0,
+        rewriteExplanationReceivedType: "other",
+        rewriteExplanationCount: null,
+        rewriteExplanationLimit:
+          GROUNDED_TAILORED_RESUME_LIMITS.rewriteExplanationMax,
         changedSectionsCount: 0,
         maximumChangedSections:
           GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
@@ -199,6 +209,24 @@ function diagnostics(
       (total, summary) => total + summary.deduplicatedFactIdCount,
       0,
     ),
+    rewriteExplanationReceivedType:
+      repaired?.metadata.groundedNormalizationSummary
+        ?.rewriteExplanationReceivedType ??
+      initial.metadata.groundedNormalizationSummary
+        ?.rewriteExplanationReceivedType ??
+      "other",
+    rewriteExplanationCount:
+      repaired?.metadata.groundedNormalizationSummary
+        ?.rewriteExplanationCount ??
+      initial.metadata.groundedNormalizationSummary
+        ?.rewriteExplanationCount ??
+      null,
+    rewriteExplanationLimit:
+      repaired?.metadata.groundedNormalizationSummary
+        ?.rewriteExplanationLimit ??
+      initial.metadata.groundedNormalizationSummary
+        ?.rewriteExplanationLimit ??
+      GROUNDED_TAILORED_RESUME_LIMITS.rewriteExplanationMax,
     changedSectionsCount:
       repaired?.metadata.groundedNormalizationSummary?.changedSectionsCount ??
       initial.metadata.groundedNormalizationSummary?.changedSectionsCount ??
@@ -366,6 +394,12 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             finalDiagnostics.canonicalizedSectionOrderCount,
           deduplicatedSourceFactIdCount:
             finalDiagnostics.deduplicatedSourceFactIdCount,
+          rewriteExplanationReceivedType:
+            finalDiagnostics.rewriteExplanationReceivedType,
+          rewriteExplanationCount:
+            finalDiagnostics.rewriteExplanationCount,
+          rewriteExplanationLimit:
+            finalDiagnostics.rewriteExplanationLimit,
           changedSectionsCount: finalDiagnostics.changedSectionsCount,
           maximumChangedSections: finalDiagnostics.maximumChangedSections,
           maximumSourceFactIdsObserved:
