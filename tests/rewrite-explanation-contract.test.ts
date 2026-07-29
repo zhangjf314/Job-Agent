@@ -195,7 +195,7 @@ describe("rewriteExplanation strict contract", () => {
     expect(groundedTailoredResumeOutputContract.split(contract)).toHaveLength(2);
   });
 
-  it("passes the same authoritative contract to factuality repair", async () => {
+  it("keeps the initial contract authoritative while repair uses patches only", async () => {
     const invalid = fixture() as GroundedTailoredResume;
     invalid.sections[0].lines = [{
       text: "不存在事实来源的声明",
@@ -210,7 +210,13 @@ describe("rewriteExplanation strict contract", () => {
           metadata: completionMetadata(),
         })
         .mockResolvedValueOnce({
-          data: invalid,
+          data: {
+            repairs: [{
+              targetId: "T1",
+              action: "replace",
+              replacement: invalid.sections[0].lines[0],
+            }],
+          },
           usage: {},
           metadata: completionMetadata(),
         }),
@@ -230,7 +236,8 @@ describe("rewriteExplanation strict contract", () => {
     expect(calls[0][0].outputContract).toBe(
       groundedTailoredResumeOutputContract,
     );
-    expect(calls[1][0].outputContract).toBe(
+    expect(calls[1][0].outputContract).toContain('"repairs"');
+    expect(calls[1][0].outputContract).not.toBe(
       groundedTailoredResumeOutputContract,
     );
     expect(JSON.stringify(calls[1][0].messages)).not.toContain(

@@ -116,6 +116,21 @@ continue to fail schema validation. Safe observation stores only stage statuses,
 cardinality counts, fixed limits, and fixed schema paths—never generated text
 or fact-ID values.
 
+If the deterministic factuality gate rejects an otherwise valid Grounded
+result, violations are grouped by their fixed `GroundedText` path into stable
+temporary targets (`T1`, `T2`, ...). The single allowed factuality-repair
+request receives only the candidate fact registry, JD-only requirements, and
+the targeted claims. It returns one strict `replace` patch per target rather
+than regenerating the full resume. The application validates exact target
+coverage and candidate `F_*` IDs, applies patches to a deep copy, verifies that
+only targeted `text`, `sourceFactIds`, and `kind` values changed, then reruns
+the complete Grounded schema and factuality gate. Unknown paths, missing,
+duplicate, or extra targets, scope changes, incomplete repairs, and newly
+introduced violations all remain blocking failures. Safe observation records
+only target paths, fixed categories, counts, and before/after status; target
+text, replacement text, fact-ID values, prompts, and responses are never
+stored.
+
 ## Local real-provider smoke test
 
 Configure `.env`, then run:

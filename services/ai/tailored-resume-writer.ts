@@ -4,6 +4,7 @@ import type { ResumeProfile } from "@/services/resume-generator";
 import { generateTailoredResumeContent } from "@/services/tailored-resume-generator";
 import {
   LLMClient,
+  LLMClientError,
   type LLMCompletionMetadata,
   type LLMResponseSafetySummary,
 } from "./llm-client";
@@ -35,6 +36,21 @@ import {
 import type {
   RewriteExplanationReceivedType,
 } from "./grounded-tailored-resume-contract";
+import {
+  applyFactualityRepairPatch,
+  buildFactualityRepairMessages,
+  buildFactualityRepairOutputContract,
+  buildFactualityRepairTargets,
+  classifyFactualityRepairOutcome,
+  factualityRepairPatchSchema,
+  FactualityRepairError,
+  summarizeFactualityRepair,
+  validateFactualityRepairPatch,
+  type FactualityRepairErrorCode,
+  type FactualityRepairPatch,
+  type FactualityRepairSummary,
+  type FactualityRepairTarget,
+} from "./tailored-resume-factuality-repair";
 
 export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
@@ -79,6 +95,18 @@ export type TailoredResumeDiagnostics = {
   maximumChangedSections: number;
   maximumSourceFactIdsObserved: number | null;
   sourceFactIdLimit: number;
+  factualityViolationCountBeforeRepair: number;
+  factualityRepairTargetCount: number;
+  factualityRepairPatchCount: number;
+  factualityRepairApplied: boolean;
+  factualityViolationCountAfterRepair: number;
+  factualityViolationsResolved: number;
+  factualityViolationsIntroduced: number;
+  factualityRepairRemainingCategories: string[];
+  factualityRepairScopeViolation: boolean;
+  factualityRepairTargetPaths: string[];
+  factualityRepairTargetCategories: string[];
+  factualityRepairFailureCategory?: FactualityRepairErrorCode;
   httpStatus?: number;
   responseSafetySummary?: LLMResponseSafetySummary;
 };
@@ -130,6 +158,17 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
           GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
         maximumSourceFactIdsObserved: 0,
         sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+        factualityViolationCountBeforeRepair: 0,
+        factualityRepairTargetCount: 0,
+        factualityRepairPatchCount: 0,
+        factualityRepairApplied: false,
+        factualityViolationCountAfterRepair: 0,
+        factualityViolationsResolved: 0,
+        factualityViolationsIntroduced: 0,
+        factualityRepairRemainingCategories: [],
+        factualityRepairScopeViolation: false,
+        factualityRepairTargetPaths: [],
+        factualityRepairTargetCategories: [],
         httpStatus: undefined,
       },
     };
@@ -141,8 +180,8 @@ function add(valueA?: number, valueB?: number) {
   return (valueA ?? 0) + (valueB ?? 0);
 }
 
-type GroundedCompletion = {
-  data: GroundedTailoredResume;
+type Completion<T> = {
+  data: T;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -151,14 +190,72 @@ type GroundedCompletion = {
   metadata: LLMCompletionMetadata;
 };
 
+type GroundedCompletion = Completion<GroundedTailoredResume>;
+type RepairCompletion = Completion<FactualityRepairPatch>;
+
+function emptyRepairSummary(report: FactualityReport): FactualityRepairSummary {
+  return {
+    factualityViolationCountBeforeRepair: report.violations.length,
+    factualityRepairTargetCount: 0,
+    factualityRepairPatchCount: 0,
+    factualityRepairApplied: false,
+    factualityViolationCountAfterRepair: report.violations.length,
+    factualityViolationsResolved: 0,
+    factualityViolationsIntroduced: 0,
+    factualityRepairRemainingCategories: [
+      ...new Set(report.violations.map((item) => item.category)),
+    ].sort(),
+    factualityRepairScopeViolation: false,
+    factualityRepairTargetPaths: [],
+    factualityRepairTargetCategories: [],
+  };
+}
+
+function repairCompletionFromError(
+  error: LLMClientError,
+  initial: GroundedCompletion,
+): RepairCompletion {
+  return {
+    data: { repairs: [] },
+    usage: error.usage,
+    metadata: {
+      requestId: error.requestId ?? initial.metadata.requestId,
+      model: initial.metadata.model,
+      latencyMs: error.latencyMs ?? 0,
+      retryCount: error.retryCount,
+      repairCount: error.repairCount,
+      finalizationRetryCount: error.finalizationRetryCount,
+      externalRequestCount: error.externalRequestCount,
+      reasoningFieldPresent:
+        error.responseSummary?.reasoningFieldPresent ?? false,
+      thinkingModeRequested: initial.metadata.thinkingModeRequested,
+      httpStatus: error.httpStatus,
+      jsonStatus:
+        error.code === "LLM_STRUCTURED_OUTPUT_INVALID" ? "failed" : "passed",
+      normalizationStatus: "not_reached",
+      schemaStatus:
+        error.code === "LLM_SCHEMA_VALIDATION_FAILED"
+          ? "failed"
+          : "not_reached",
+      factualityStatus: "not_reached",
+      schemaValidationStatus:
+        error.code === "LLM_SCHEMA_VALIDATION_FAILED"
+          ? "failed"
+          : "not_reached",
+      responseSafetySummary:
+        error.responseSummary ?? initial.metadata.responseSafetySummary,
+    },
+  };
+}
+
 function diagnostics(
   report: FactualityReport,
   initial: GroundedCompletion,
-  repaired?: GroundedCompletion,
+  repaired: RepairCompletion | undefined,
+  repairSummary: FactualityRepairSummary,
 ): TailoredResumeDiagnostics {
   const normalizationSummaries = [
     initial.metadata.groundedNormalizationSummary,
-    repaired?.metadata.groundedNormalizationSummary,
   ].filter((summary) => summary !== undefined);
   return {
     factualityStatus: report.status,
@@ -236,12 +333,11 @@ function diagnostics(
       initial.metadata.groundedNormalizationSummary?.changedSectionsLimit ??
       GROUNDED_TAILORED_RESUME_LIMITS.changedSectionsMax,
     maximumSourceFactIdsObserved:
-      repaired?.metadata.groundedNormalizationSummary
-        ?.maximumSourceFactIdsObserved ??
       initial.metadata.groundedNormalizationSummary
         ?.maximumSourceFactIdsObserved ??
       null,
     sourceFactIdLimit: GROUNDED_SOURCE_FACT_ID_LIMIT,
+    ...repairSummary,
     httpStatus: repaired?.metadata.httpStatus ?? initial.metadata.httpStatus,
     responseSafetySummary:
       repaired?.metadata.responseSafetySummary ?? initial.metadata.responseSafetySummary,
@@ -311,49 +407,92 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       });
       let grounded = groundedTailoredResumeSchema.parse(initial.data);
       let report = evaluateTailoredResumeFactuality(grounded, candidateFacts, jobRequirements);
-      let repaired: GroundedCompletion | undefined;
+      const reportBeforeRepair = report;
+      let repaired: RepairCompletion | undefined;
+      let repairTargets: FactualityRepairTarget[] = [];
+      let repairPatchCount = 0;
+      let repairApplied = false;
+      let repairFailureCategory: FactualityRepairErrorCode | undefined;
+      let repairSummary = emptyRepairSummary(report);
 
       if (
         report.status !== "pass" &&
         input.requestPolicy?.allowFactualityRepair !== false
       ) {
-        repaired = await this.client.structuredCompletion({
-          schemaName: "grounded_tailored_resume_factuality_repair",
-          schema: groundedTailoredResumeSchema,
-          normalizeParsedJson: normalizeGroundedTailoredResume,
-          outputContract: groundedTailoredResumeOutputContract,
-          allowTransportRetry: input.requestPolicy?.allowTransportRetry,
-          allowJsonRepair: input.requestPolicy?.allowJsonRepair,
-          allowFinalizationRetry: false,
-          messages: [
-            {
-              role: "system",
-              content: [
-                "Remove or conservatively rewrite unsupported candidate claims.",
-                "Do not add facts, explanations, fields, or content.",
-                "Use only the allowed F_* IDs already present in the supplied allowed list.",
-                "Keep the same compact schema, array limits, and text limits. Return JSON only.",
-              ].join("\n"),
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                currentStructuredResult: grounded,
-                allowedCandidateFactIds: candidateFacts.map((fact) => fact.id),
-                violations: report.violations.map((item) => ({
-                  category: item.category,
-                  path: item.path,
-                  safeSummary: item.safeSummary,
-                })),
-              }),
-            },
-          ],
-        });
-        grounded = groundedTailoredResumeSchema.parse(repaired.data);
-        report = evaluateTailoredResumeFactuality(grounded, candidateFacts, jobRequirements);
+        try {
+          repairTargets = buildFactualityRepairTargets(
+            grounded,
+            report.violations,
+          );
+          repaired = await this.client.structuredCompletion({
+            schemaName: "grounded_text_factuality_repair_patch",
+            schema: factualityRepairPatchSchema,
+            outputContract: buildFactualityRepairOutputContract(repairTargets),
+            allowTransportRetry: input.requestPolicy?.allowTransportRetry,
+            allowJsonRepair: false,
+            allowFinalizationRetry: false,
+            messages: buildFactualityRepairMessages(
+              candidateFacts,
+              jobRequirements,
+              repairTargets,
+            ),
+          });
+          const patch = validateFactualityRepairPatch(
+            repaired.data,
+            repairTargets,
+            candidateFacts,
+          );
+          repairPatchCount = patch.repairs.length;
+          grounded = applyFactualityRepairPatch(
+            grounded,
+            repairTargets,
+            patch,
+          );
+          repairApplied = true;
+          report = evaluateTailoredResumeFactuality(
+            grounded,
+            candidateFacts,
+            jobRequirements,
+          );
+          repairFailureCategory = classifyFactualityRepairOutcome(
+            reportBeforeRepair,
+            report,
+          );
+        } catch (error) {
+          if (error instanceof FactualityRepairError) {
+            repairFailureCategory = error.code as FactualityRepairErrorCode;
+          } else if (
+            error instanceof LLMClientError &&
+            (
+              error.code === "LLM_SCHEMA_VALIDATION_FAILED" ||
+              error.code === "LLM_STRUCTURED_OUTPUT_INVALID"
+            )
+          ) {
+            repaired = repairCompletionFromError(error, initial);
+            repairFailureCategory =
+              error.code === "LLM_SCHEMA_VALIDATION_FAILED"
+                ? "FACTUALITY_REPAIR_PATCH_SCHEMA_INVALID"
+                : "FACTUALITY_REPAIR_RESPONSE_INVALID";
+          } else {
+            throw error;
+          }
+        }
+        repairSummary = summarizeFactualityRepair(
+          reportBeforeRepair,
+          report,
+          repairTargets,
+          repairPatchCount,
+          repairApplied,
+          repairFailureCategory,
+        );
       }
 
-      const finalDiagnostics = diagnostics(report, initial, repaired);
+      const finalDiagnostics = diagnostics(
+        report,
+        initial,
+        repaired,
+        repairSummary,
+      );
       await this.client.recordSafeObservation({
         operation: "tailored_resume_result",
         provider: "llm_provider",
@@ -363,7 +502,11 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         promptTokens: finalDiagnostics.inputTokens,
         completionTokens: finalDiagnostics.outputTokens,
         totalTokens: finalDiagnostics.totalTokens,
-        errorCode: report.status === "pass" ? undefined : "TAILORED_RESUME_FACTUALITY_VIOLATION",
+        errorCode:
+          report.status === "pass" && !repairFailureCategory
+            ? undefined
+            : repairFailureCategory ??
+              "TAILORED_RESUME_FACTUALITY_VIOLATION",
         fallbackUsed: false,
         metadata: {
           requestId: initial.metadata.requestId,
@@ -405,6 +548,30 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           maximumSourceFactIdsObserved:
             finalDiagnostics.maximumSourceFactIdsObserved,
           sourceFactIdLimit: finalDiagnostics.sourceFactIdLimit,
+          factualityViolationCountBeforeRepair:
+            finalDiagnostics.factualityViolationCountBeforeRepair,
+          factualityRepairTargetCount:
+            finalDiagnostics.factualityRepairTargetCount,
+          factualityRepairPatchCount:
+            finalDiagnostics.factualityRepairPatchCount,
+          factualityRepairApplied:
+            finalDiagnostics.factualityRepairApplied,
+          factualityViolationCountAfterRepair:
+            finalDiagnostics.factualityViolationCountAfterRepair,
+          factualityViolationsResolved:
+            finalDiagnostics.factualityViolationsResolved,
+          factualityViolationsIntroduced:
+            finalDiagnostics.factualityViolationsIntroduced,
+          factualityRepairRemainingCategories:
+            finalDiagnostics.factualityRepairRemainingCategories,
+          factualityRepairScopeViolation:
+            finalDiagnostics.factualityRepairScopeViolation,
+          factualityRepairTargetPaths:
+            finalDiagnostics.factualityRepairTargetPaths,
+          factualityRepairTargetCategories:
+            finalDiagnostics.factualityRepairTargetCategories,
+          factualityRepairFailureCategory:
+            finalDiagnostics.factualityRepairFailureCategory,
           httpStatus: finalDiagnostics.httpStatus,
           jsonStatus: "passed",
           normalizationStatus: "passed",
@@ -412,8 +579,12 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           groundedSchemaStatus: "passed",
         },
       });
-      if (report.status !== "pass") {
-        const failure = new TailoredResumeFactualityError(report);
+      if (report.status !== "pass" || repairFailureCategory) {
+        const failure = new TailoredResumeFactualityError(
+          report,
+          repairFailureCategory ??
+            "TAILORED_RESUME_FACTUALITY_VIOLATION",
+        );
         failure.diagnostics = finalDiagnostics;
         throw failure;
       }
