@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PORTFOLIO_DEMO_MARKER,
+  PORTFOLIO_DEMO_TIMESTAMP,
   buildPortfolioCompiledResume,
   portfolioBaseResumeMarkdown,
   portfolioJDAnalysis,
@@ -14,6 +15,10 @@ describe("portfolio deterministic fixtures", () => {
 
   it("uses a fixed demo marker", () => {
     expect(PORTFOLIO_DEMO_MARKER).toBe("portfolio-demo-v1");
+  });
+
+  it("uses a fixed timestamp for reproducible screenshots", () => {
+    expect(PORTFOLIO_DEMO_TIMESTAMP).toBe("2026-07-30T10:08:57.000Z");
   });
 
   it("labels the base resume as fictional demo data", () => {
