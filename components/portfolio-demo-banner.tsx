@@ -1,4 +1,5 @@
 import React from "react";
+import { BRAND } from "@/lib/branding";
 
 export function isPortfolioDemoMode(
   env: Partial<NodeJS.ProcessEnv> = process.env,
@@ -11,9 +12,9 @@ export function PortfolioDemoBanner() {
   return (
     <div
       data-portfolio-demo-banner
-      className="border-b border-amber-300 bg-amber-50 px-6 py-2 text-center text-sm font-medium text-amber-950"
+      className="border-b border-amber-300 bg-amber-50 px-6 py-2 text-center text-sm font-medium text-amber-950 print:hidden"
     >
-      Portfolio Demo · All data is fictional
+      {BRAND.productNameZh} Portfolio Demo · All data is fictional
       <span className="mx-2 text-amber-500">·</span>
       作品集演示 · 所有数据均为虚构
     </div>

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
+import { BRAND } from "@/lib/branding";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "求职助手",
-  description: "中国大陆个人求职助手",
+  title: BRAND.productNameZh,
+  description: `${BRAND.productNameZh} · ${BRAND.productNameEn}`,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

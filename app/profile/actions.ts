@@ -6,9 +6,9 @@ import type { CareerProfileInput } from "@/schemas/career-profile";
 import {
   createCareerProfile,
   deleteCareerProfile,
-  getOrCreateDemoUser,
   replaceCareerProfileSections,
 } from "@/services/career-profile-service";
+import { getCurrentUser } from "@/services/auth/current-user";
 import { createMockGraduateProfile } from "@/services/mock-profile";
 
 export async function createCareerProfileAction(payload: CareerProfileInput) {
@@ -30,7 +30,7 @@ export async function deleteCareerProfileAction(id: string) {
 }
 
 export async function createMockProfileAction() {
-  const user = await getOrCreateDemoUser();
+  const user = await getCurrentUser();
   const profile = await createCareerProfile(createMockGraduateProfile(user.id));
   revalidatePath("/profile");
   redirect(`/profile/${profile.id}`);

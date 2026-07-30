@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Download } from "lucide-react";
 import { ErrorPanel } from "@/components/error-panel";
 import { Button } from "@/components/ui/button";
-import { PrintButton } from "@/components/print-button";
-import { ResumeDocument } from "@/components/resume-document";
+import { ResumePrintShell } from "@/components/resume-print-shell";
 import { getResumeById } from "@/services/resume-service";
 import { renderResumeMarkdown, type RenderedResumeMarkdown } from "@/services/resume-templates/renderer";
 
@@ -44,15 +43,14 @@ export default async function ResumePdfPage({ params }: Props) {
               下载原文
             </Link>
           </Button>
-          <PrintButton />
         </div>
       </div>
 
       {rendered ? (
-        <ResumeDocument
+        <ResumePrintShell
+          resumeId={resume.id}
           markdown={rendered.markdown}
           templateKey={rendered.template.key}
-          className="mx-auto max-w-[900px] bg-white px-14 py-12 shadow-sm print:max-w-none print:p-0 print:shadow-none"
         />
       ) : (
         <div className="mx-auto max-w-[900px]">

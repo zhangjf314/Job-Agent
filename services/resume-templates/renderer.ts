@@ -12,7 +12,13 @@ export type ResumeTemplateData = {
   targetRole?: string | null;
   targetCity?: string | null;
   contentMarkdown: string;
+  showPhoto?: boolean;
   profile?: {
+    id?: string;
+    photoAsset?: {
+      id: string;
+      updatedAt: Date;
+    } | null;
     basicInfo?: {
       realName?: string | null;
       phone?: string | null;
@@ -56,7 +62,10 @@ function compactMarkdown(value: string) {
   return value.replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function buildPlaceholders(resume: ResumeTemplateData): Record<SupportedPlaceholder, string> {
+function buildPlaceholders(
+  resume: ResumeTemplateData,
+  template: ResumeTemplateDefinition,
+): Record<SupportedPlaceholder, string> {
   const basic = resume.profile?.basicInfo;
   const name = inlineText(basic?.realName) || inlineText(resume.title) || "未命名";
   const targetRole = inlineText(resume.targetRole);
@@ -72,14 +81,20 @@ function buildPlaceholders(resume: ResumeTemplateData): Record<SupportedPlacehol
     inlineText(basic?.personalWebsite),
   ].filter(Boolean).join(" | ");
 
+  const photo =
+    template.supportsPhoto &&
+    resume.showPhoto !== false &&
+    resume.profile?.id &&
+    resume.profile.photoAsset
+      ? `[[PROFILE_PHOTO:/api/profile/photo/${encodeURIComponent(resume.profile.id)}?v=${resume.profile.photoAsset.updatedAt.getTime()}]]`
+      : "";
+
   return {
     title: inlineText(resume.title) || `${name}${targetRole ? ` - ${targetRole}` : ""}`,
     name,
     headline,
     contactLine,
-    // CareerProfile currently has no photo field. Empty output deliberately selects
-    // the template's no-photo layout and never emits a broken image.
-    photo: "",
+    photo,
     body: resume.contentMarkdown.trim(),
   };
 }
@@ -87,7 +102,7 @@ function buildPlaceholders(resume: ResumeTemplateData): Record<SupportedPlacehol
 export function renderResumeMarkdown(resume: ResumeTemplateData): RenderedResumeMarkdown {
   const template = getResumeTemplate(resume.templateKey);
   const source = loadTemplateSource(template);
-  const placeholders = buildPlaceholders(resume);
+  const placeholders = buildPlaceholders(resume, template);
   const markdown = source.replace(
     /\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g,
     (_match, key: SupportedPlaceholder) => placeholders[key],

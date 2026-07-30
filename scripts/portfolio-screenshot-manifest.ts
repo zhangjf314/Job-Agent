@@ -21,4 +21,15 @@ export const PORTFOLIO_SCREENSHOTS = [
     path: "/evaluation",
     selector: "[data-portfolio-evaluation-calls]",
   },
+  {
+    filename: "11-profile-photo-editor.png",
+    path: "/profile/portfolio-demo-profile-v1",
+    selector: "[data-profile-photo-editor]",
+  },
+  {
+    filename: "12-smart-one-page-print.png",
+    path: "/resume/portfolio-demo-base-resume-v1/pdf",
+    selector: "[data-print-controls]",
+    click: "[data-print-mode-option='smart']",
+  },
 ] as const;

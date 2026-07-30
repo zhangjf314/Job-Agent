@@ -57,6 +57,7 @@ export const resumeCreateInputSchema = z.object({
   generationNotes: z.array(z.string().trim().min(1)).default([]),
   changeLog: z.string().trim().optional().default(""),
   isDefault: z.boolean().default(false),
+  showPhoto: z.boolean().optional(),
   sections: z.array(resumeSectionSchema).default([]),
 });
 

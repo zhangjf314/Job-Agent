@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { CareerProfileForm } from "@/components/career-profile-form";
 import { Button } from "@/components/ui/button";
-import { getOrCreateDemoUser } from "@/services/career-profile-service";
+import { getCurrentUser } from "@/services/auth/current-user";
 import { createMockGraduateProfile } from "@/services/mock-profile";
 import { createCareerProfileAction } from "../actions";
 import { toCareerProfileFormValues } from "../form-values";
 
 export default async function NewProfilePage() {
-  const user = await getOrCreateDemoUser();
+  const user = await getCurrentUser();
   const defaultValues = toCareerProfileFormValues(createMockGraduateProfile(user.id));
 
   return (

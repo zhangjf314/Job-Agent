@@ -24,11 +24,15 @@ Personal Job Agent 是一个覆盖职业档案、简历、JD 分析、岗位管�
 - [Career Strategy](docs/screenshots/07-career-strategy.png)
 - [Application Workbench](docs/screenshots/08-application-workbench.png)
 - [AI Settings](docs/screenshots/09-ai-settings.png)
+- [Profile Photo Editor](docs/screenshots/11-profile-photo-editor.png)
+- [Smart One-Page Print](docs/screenshots/12-smart-one-page-print.png)
 
 ## 核心功能
 
 - 职业档案：教育、技能、项目、经历和求职偏好
+- 档案证件照：本地上传、3:4 裁剪、WebP 规范化、替换和删除
 - 简历中心：通用简历、岗位定制简历、模板、Markdown 与打印/PDF
+- 智能一页打印：在可读性下限内自动适配；无法安全适配时保留标准分页
 - JD 分析：职责、技能、关键词、匹配项、缺口和风险
 - 定制简历：事实选择 Plan、确定性编译、Grounded Schema 与事实门禁
 - 申请材料：自我介绍、投递邮件和招聘沟通话术
@@ -87,9 +91,9 @@ Factuality violations: 0
 
 ## 工程质量
 
-- 59 个测试文件、560 项自动化测试
+- 63 个测试文件、615 项自动化测试
 - Linux 与 Windows GitHub Actions
-- Prisma migrations：9
+- Prisma migrations：10
 - TypeScript、ESLint、Prisma validate、Production Build 全部门禁
 - 独立 Demo 数据库、幂等 seed、截图前后 LLMCallLog 数量校验
 
@@ -185,7 +189,7 @@ app/                         Next.js 页面与 Server Actions
 components/                  UI 组件和 Demo Banner
 services/ai/                 Provider、Plan、Compiler、事实门禁与观测
 services/                    简历、JD、策略、岗位和投递服务
-prisma/                      Schema 与 9 条 migration
+prisma/                      Schema 与 10 条 migration
 scripts/portfolio-*.ts       Demo DB、seed、验证、截图与审计
 docs/architecture/           系统与 Pipeline 文档
 docs/demo/                   演示脚本和面试讲解
