@@ -121,7 +121,7 @@ export default async function ResumeDetailPage({ params }: Props) {
 
         <div className="space-y-6">
           {applicationMaterials ? (
-            <Card>
+            <Card data-portfolio-application-materials>
               <CardHeader><CardTitle>岗位投递材料</CardTitle></CardHeader>
               <CardContent className="grid gap-5 text-sm">
                 <div><div className="mb-2 font-medium">自我介绍</div><pre className="whitespace-pre-wrap rounded-md bg-muted p-4">{applicationMaterials.selfIntroduction}</pre></div>
@@ -130,7 +130,7 @@ export default async function ResumeDetailPage({ params }: Props) {
               </CardContent>
             </Card>
           ) : null}
-          <Card>
+          <Card data-portfolio-tailored-resume-content>
             <CardHeader><CardTitle>编辑简历原文</CardTitle></CardHeader>
             <CardContent>
               <form action={saveResumeContentAction.bind(null, resume.id)} className="space-y-4">

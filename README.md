@@ -1,207 +1,207 @@
 # Personal Job Agent
 
+> AI-powered job-search, resume-tailoring and application workspace
+
 [![CI](https://github.com/zhangjf314/Job-Agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhangjf314/Job-Agent/actions/workflows/ci.yml)
 
-基于 Next.js、Prisma 和 PostgreSQL 构建的个人求职工作流平台，覆盖职业档案、简历生成、JD 分析、岗位管理、投递跟踪和质量观测。
+Personal Job Agent 是一个覆盖职业档案、简历、JD 分析、岗位管理、职业策略与投递复盘的个人求职工作台。它使用 **LLM Selection Plan + Deterministic Grounded Compiler**：模型只选择和排序候选人事实，系统负责最终文本、结构与引用，从而让岗位个性化简历可验证、可追踪，并阻止岗位要求被改写成虚构经历。
 
-当前版本是面向单用户 Demo 的 MVP：AI 默认使用确定性的 Mock Provider，岗位搜索默认使用 Fixture Provider。项目已经预留 OpenAI-compatible AI 接口以及 Tavily/Bing 搜索接口，但默认配置不会调用真实外部服务，也不需要 API Key。
+## 产品截图
 
-## 功能概览
+所有截图均来自独立 Portfolio 数据库，人物、学校、公司、岗位和项目均为虚构数据。
 
-- 职业档案：教育、技能、项目、经历、证书、奖项和求职偏好
-- 简历中心：通用简历、JD 定制简历、Markdown 下载与浏览器打印
-- 简历模板：极简、简洁大方、深色、带证件照四种模板
-- JD 分析：职责、硬技能、软技能、关键词、匹配项、差距和风险
-- 职业策略：方向建议、技能差距、求职策略和行动计划
-- 岗位管理：手动文本、公开 URL、CSV/Excel 和 Fixture 搜索结果导入
-- 岗位质量：归一化、去重、风险识别、匹配评分和推荐解释
-- 投递工作台：投递漏斗、任务、面试轮次、反馈和 Offer 对比
-- 质量观测：人工评分以及 AI 调用耗时、Token 和失败记录
-- 数据管理：Demo 数据初始化、统计、JSON 导出和删除
+| Dashboard | JD Analysis |
+| --- | --- |
+| ![Dashboard](docs/screenshots/01-dashboard.png) | ![JD Analysis](docs/screenshots/04-jd-analysis.png) |
+| Tailored Resume | Evaluation |
+| ![Tailored Resume](docs/screenshots/05-tailored-resume.png) | ![Evaluation](docs/screenshots/10-evaluation.png) |
+
+完整截图：
+
+- [Resume Center](docs/screenshots/02-resume-center.png)
+- [Resume Detail](docs/screenshots/03-resume-detail.png)
+- [Application Materials](docs/screenshots/06-application-materials.png)
+- [Career Strategy](docs/screenshots/07-career-strategy.png)
+- [Application Workbench](docs/screenshots/08-application-workbench.png)
+- [AI Settings](docs/screenshots/09-ai-settings.png)
+
+## 核心功能
+
+- 职业档案：教育、技能、项目、经历和求职偏好
+- 简历中心：通用简历、岗位定制简历、模板、Markdown 与打印/PDF
+- JD 分析：职责、技能、关键词、匹配项、缺口和风险
+- 定制简历：事实选择 Plan、确定性编译、Grounded Schema 与事实门禁
+- 申请材料：自我介绍、投递邮件和招聘沟通话术
+- 职业策略：岗位方向、技能缺口、搜索策略和 30 天行动计划
+- 岗位库：手动、文件、公开 URL 与 Fixture 数据导入
+- 投递工作台：漏斗、任务、面试反馈与 Offer 对比
+- Evaluation：Provider 调用耗时、Token、Pipeline 状态和安全指标
+
+## 核心架构
+
+```mermaid
+flowchart LR
+    Profile["Candidate Profile"] --> Registry["Candidate Fact Registry"]
+    Registry --> Plan["LLM Selection Plan"]
+    Plan --> Validation["Plan Schema + Validation"]
+    Validation --> Compiler["Deterministic Grounded Compiler"]
+    Compiler --> Schema["Grounded Schema"]
+    Schema --> Gate["Factuality Gate"]
+    Gate --> Resume["Tailored Resume"]
+    Resume --> Save["Save-time Gate"]
+```
+
+更多细节：
+
+- [Portfolio 系统架构](docs/architecture/portfolio-architecture.md)
+- [定制简历 Pipeline](docs/architecture/tailored-resume-pipeline.md)
+- [3–5 分钟演示脚本](docs/demo/portfolio-demo-script.md)
+- [面试讲解要点](docs/demo/interview-talking-points.md)
+
+## 为什么不让 LLM 直接写最终简历
+
+完整对象由模型直接生成时容易出现 Schema 漂移、数组超限、文本超长、岗位要求事实化和 Repair 不稳定。当前架构将职责拆开：
+
+- LLM 只做相关性选择、section 分配和优先级排序
+- Plan Schema 与 validator 拒绝未知、重复及 `J_REQ_*` ID
+- Compiler 从结构化候选人事实生成完整文本、引用和申请材料
+- Grounded Schema 与事实门禁作为最终安全边界
+- 只有全部门禁通过后才能保存公共业务对象
+
+## 真实 Provider 验收
+
+一次受控 Smoke 已在 `deepseek-v4-flash` 上完成：
+
+```text
+Provider: DeepSeek OpenAI-compatible API
+External requests: 1
+Prompt tokens: 704
+Completion tokens: 247
+Total tokens: 951
+Latency: 2111 ms
+Fallback: false
+Factuality violations: 0
+```
+
+这只是单次功能验收，不代表性能或成本基准。Portfolio Demo 不会调用外部 LLM。
+
+## 工程质量
+
+- 59 个测试文件、559 项自动化测试
+- Linux 与 Windows GitHub Actions
+- Prisma migrations：9
+- TypeScript、ESLint、Prisma validate、Production Build 全部门禁
+- 独立 Demo 数据库、幂等 seed、截图前后 LLMCallLog 数量校验
 
 ## 技术栈
 
-| 类别 | 技术 |
+| 范畴 | 技术 |
 | --- | --- |
 | Web | Next.js 15、React 19、TypeScript |
 | UI | Tailwind CSS、Radix UI、Lucide |
 | 数据 | PostgreSQL 16、Prisma 6 |
-| 校验与表单 | Zod、React Hook Form |
-| 测试 | Vitest、Testing Library、jsdom |
-| 工程化 | ESLint、GitHub Actions、Docker Compose |
-| 可扩展接口 | OpenAI-compatible Provider、Tavily/Bing Search Provider |
-
-上述 Provider 接口不代表真实服务已经启用；默认运行模式仍是 Mock AI 与 Fixture 搜索。
-
-## 架构
-
-```mermaid
-flowchart TD
-    UI["Next.js UI / Server Actions"]
-    Services["Application Services"]
-    Providers["AI Provider / Search Provider"]
-    Prisma["Prisma ORM"]
-    DB[("PostgreSQL")]
-
-    UI --> Services
-    Services --> Providers
-    Services --> Prisma
-    Prisma --> DB
-```
-
-简历模板引擎将模板选择与各输出入口统一起来：
-
-```mermaid
-flowchart LR
-    Data["Resume Data"] --> Registry["Template Registry"]
-    Registry --> Renderer["Markdown Renderer"]
-    Renderer --> Preview["Preview"]
-    Renderer --> Download["Markdown Download"]
-    Renderer --> Print["Print / PDF"]
-```
-
-模板骨架位于 `template/*.md`，元数据注册表位于 `services/resume-templates/registry.ts`，统一渲染入口位于 `services/resume-templates/renderer.ts`。占位符与扩展规范见 `docs/resume-template-system.md`。
-
-## 页面展示
-
-仓库暂未提交界面截图，避免误将本机路径、浏览器信息或真实求职数据带入公共历史。后续截图将仅使用仓库自带的虚构 Demo 数据，并放入 `docs/images/`。
+| 验证 | Zod、Grounded Schema、Deterministic Compiler |
+| AI | OpenAI-compatible Provider、DeepSeek 验收、Mock Provider |
+| 测试 | Vitest、Testing Library、jsdom、Playwright |
+| 工程 | ESLint、GitHub Actions、Docker Compose |
 
 ## 本地运行
 
-### 前置条件
+### Normal development
 
-- Node.js 24.16.0（当前本地与 CI 验证版本）
-- npm
-- Docker Desktop + Docker Compose，或可访问的 PostgreSQL 16
+可按环境选择数据库启动方式：
 
-### 方案 A：Docker PostgreSQL
+- 方案 A：Docker PostgreSQL — 使用下方 `db:docker`、`db:wait` 命令
+- 方案 B：本机 PostgreSQL — 运行 `npm run db:create` 后迁移和 seed
+- 方案 C：云 PostgreSQL — 在 `.env` 中配置服务商提供的 `DATABASE_URL`
 
 ```powershell
-git clone https://github.com/zhangjf314/Job-Agent.git
-cd Job-Agent
 npm ci
 Copy-Item .env.example .env
 npm run db:docker
 npm run db:wait
-npm run prisma:generate
 npx prisma migrate deploy
 npm run seed
 npm run dev
 ```
 
-访问 `http://localhost:3000`。
+若 Docker 拉取出现 `failed to fetch anonymous token`，先检查 Docker Desktop、代理和 registry
+网络；若 Prisma 返回 `P1001`，检查 PostgreSQL 是否启动、端口与 `DATABASE_URL` 是否一致，
+也可运行 `npm run doctor` 获取诊断。
 
-macOS/Linux 可将复制环境文件的命令替换为：
+### Portfolio demo
 
-```bash
-cp .env.example .env
-```
-
-`.env.example` 只包含本地演示配置。请勿提交包含真实数据库连接串或 API Key 的 `.env`。
-
-### 方案 B：本机 PostgreSQL
-
-复制 `.env.example` 后，将 `DATABASE_URL` 改为自己的开发数据库连接串，然后执行：
+先安装并准备 PostgreSQL，然后：
 
 ```powershell
 npm ci
-npm run prisma:generate
-npx prisma migrate deploy
-npm run seed
-npm run dev
+Copy-Item .env.portfolio.example .env.portfolio.local
+# 仅在本地编辑凭证；数据库名必须保持 personal_job_agent_portfolio
+npm run portfolio:db:setup
+npm run portfolio:verify
+npm run portfolio:dev -- --port 3100
 ```
 
-`npm run seed` 会重建 `DEMO_USER_EMAIL` 对应的虚构 Demo 用户，默认是 `demo@example.com`。不要把真实求职数据用于公共演示。
+本机已有 `.env` 时，`portfolio:db:setup` 可自动生成被 Git 忽略的 `.env.portfolio.local`，只复用本地连接凭证并替换为独立数据库名。
 
-### 方案 C：云 PostgreSQL
-
-复制 `.env.example` 后，将 `DATABASE_URL` 改为云 PostgreSQL 提供的连接串。不要把连接串提交到 Git；确认网络和 TLS 参数符合服务商要求后，执行：
+重置 Demo：
 
 ```powershell
-npm ci
-npm run prisma:generate
-npx prisma migrate deploy
-npm run seed
-npm run dev
+npm run portfolio:db:reset
+npm run portfolio:verify
 ```
 
-### 常见数据库问题
+## Demo 模式
 
-如果 Prisma 报告 `P1001`，表示 `DATABASE_URL` 指向的 PostgreSQL 当前不可访问。请检查服务是否启动、主机和端口是否正确，以及数据库和用户是否已经创建。
+- Banner 明确显示 `Portfolio Demo · All data is fictional`
+- 所有候选人、学校、公司、项目、岗位和日志数值均为虚构数据
+- `AI_PROVIDER=mock`，不会调用外部 LLM
+- 使用独立 `personal_job_agent_portfolio` 数据库
+- seed 与 reset 可重复执行，固定记录数量
+- 定制简历仍通过正式 Compiler、Schema 和事实门禁
 
-如果 Docker 拉取 `postgres:16-alpine` 时出现 `failed to fetch anonymous token`，问题通常来自 Docker Hub 网络、代理、镜像源或登录状态，并不表示 Prisma Schema 或应用代码损坏。可在修复 Docker 网络后重试，或改用方案 B/C。
+生成并审计截图：
 
-## 常用命令
-
-```bash
-npm run dev              # 启动 Next.js 开发服务器
-npm run build            # 生产构建
-npm run check            # TypeScript + ESLint + Vitest
-npm run doctor           # 检查本地运行前置条件
-npm run db:docker        # 启动 Docker PostgreSQL
-npm run db:down          # 关闭 Docker 服务
-npm run db:status        # 查看 PostgreSQL 容器状态
-npm run prisma:generate  # 生成 Prisma Client
-npm run seed             # 重建虚构 Demo 数据
+```powershell
+npx playwright install chromium
+npm run portfolio:screenshots
+npm run portfolio:screenshot:audit
 ```
 
-## 质量门禁
+## 安全边界
 
-当前本地基线：
+- 不自动投递、不发送邮件、不代替用户操作招聘平台
+- 不登录招聘网站，不绕过 CAPTCHA 或反爬机制
+- 不保存 Prompt、原始响应或 `reasoning_content`
+- Mock fallback 默认关闭
+- JD requirement 不能作为候选人事实
+- Demo 数据库与主开发数据库隔离
+- `.env`、`.env.portfolio.local`、数据库 dump、日志和临时浏览器数据不得提交
 
-- TypeScript：通过
-- ESLint：通过
-- Vitest：37 个测试文件、115 项测试通过
-- Prisma Schema：校验通过
-- PostgreSQL：9 条 Migration 可在空数据库完整部署
-- Next.js Production Build：通过
+## Repository Structure
 
-`.github/workflows/ci.yml` 为 Pull Request 和推送到 `main` 提供两套门禁：
+```text
+app/                         Next.js 页面与 Server Actions
+components/                  UI 组件和 Demo Banner
+services/ai/                 Provider、Plan、Compiler、事实门禁与观测
+services/                    简历、JD、策略、岗位和投递服务
+prisma/                      Schema 与 9 条 migration
+scripts/portfolio-*.ts       Demo DB、seed、验证、截图与审计
+docs/architecture/           系统与 Pipeline 文档
+docs/demo/                   演示脚本和面试讲解
+docs/screenshots/            仅含虚构数据的正式截图
+tests/                       单元、服务、Pipeline 与安全回归测试
+```
 
-- Ubuntu：PostgreSQL 16、Prisma generate/validate/migrate、完整工程检查和生产构建
-- Windows：Prisma generate/validate 与完整工程检查，用于发现路径和跨平台问题
+## Roadmap
 
-两个 Job 都固定使用 Mock AI、Fixture 搜索，并关闭真实 Web Search 和公司页面抓取。
+- 更多合规的招聘平台数据导入
+- 更完整的职位搜索与归一化
+- 扩展简历模板与可访问性
+- Evaluation 趋势、成本与质量分析
 
-## 当前边界
-
-- 默认只使用 Mock AI，不代表真实 LLM 已完成联调
-- 默认只使用 Fixture 搜索，不代表 Tavily 或 Bing 已启用
-- 不登录招聘平台，不绕过 CAPTCHA 或反爬机制
-- 不执行自动投递、不发送邮件、不代替用户操作外部平台
-- 当前是单用户 Demo 模式，尚无生产级认证与多用户隔离
-- 尚未提供正式生产部署
-- 带证件照模板可以无照片安全渲染，但当前没有照片上传功能
-
-## 数据与隐私
-
-简历、投递记录、面试反馈和 Offer 都属于个人敏感信息。本项目仓库只包含虚构 Demo/Fixture 数据；本地或未来部署时应使用访问控制保护真实数据，并确保 `.env`、数据库备份、日志和导出文件不进入 Git。
-
-## 路线图
-
-- OpenAI-compatible 真实 LLM Provider 联调、结构化输出与失败降级
-- Tavily/Bing 真实 Web Search 配置与合规边界验证
-- 多用户认证与数据隔离
-- 可观测性、成本统计和最小真实 Smoke Test
-- 生产部署与备份恢复方案
-- 实时模板预览与可选照片上传
-
-路线图中的能力尚未完成，不应视为当前功能。
-
-## LLM thinking mode
-
-`LLM_THINKING_MODE` defaults to `provider_default`. Use `enabled` or `disabled`
-only when the configured provider explicitly supports the optional parameter.
-Disabling thinking does not disable JSON Mode, and returned reasoning content is
-never used as business output. Keep real configuration only in the untracked
-`.env` file; CI remains on Mock AI.
+尚未实现的能力不会在本项目中描述为已完成。
 
 ## License
 
-当前仓库暂未附加开源许可证。在确认全部源码和四份简历模板的再许可权之前，不声明可自由复制、修改或再分发。
-
-## OpenAI-compatible LLM
-
-项目支持本地 Mock 与通用 OpenAI-compatible Chat Completions 两种模式。真实模式的配置、
-失败重试、结构化输出、显式 Mock 降级、观测字段及本地 Smoke Test 说明见
-[`docs/llm-provider.md`](docs/llm-provider.md)。默认 CI 仍使用 Mock，不访问真实模型服务。
+仓库当前未附加开源许可证。在明确源码与简历模板的再授权范围前，不声明可自由复制、修改或再分发。

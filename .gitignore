@@ -4,5 +4,6 @@ dist
 coverage
 .env
 .env*.local
+.env.portfolio.local
 *.log
 prisma/dev.db
