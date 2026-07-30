@@ -57,11 +57,16 @@ describe("profile photo security and normalization", () => {
     ).toBe("file_too_large");
   });
 
-  it("rejects unsupported file signatures", async () => {
+  it.each([
+    ["SVG", Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), "image/svg+xml"],
+    ["GIF", Buffer.from("GIF89a\u0001\u0000\u0001\u0000"), "image/gif"],
+    ["HEIC", Buffer.from("\u0000\u0000\u0000\u0018ftypheic"), "image/heic"],
+    ["arbitrary binary", Buffer.from("not an image"), "application/octet-stream"],
+  ])("rejects unsupported %s input", async (_name, bytes, declaredMimeType) => {
     expect(
       await errorCode(processProfilePhoto({
-        bytes: Buffer.from("not an image"),
-        declaredMimeType: "image/jpeg",
+        bytes,
+        declaredMimeType,
       })),
     ).toBe("unsupported_format");
   });
