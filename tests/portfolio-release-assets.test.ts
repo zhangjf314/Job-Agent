@@ -49,5 +49,7 @@ describe("portfolio release assets", () => {
       "utf8",
     );
     expect(script).not.toMatch(/LLMClient|structuredCompletion|smoke:llm/);
+    expect(script).toContain("banner.boundingBox()");
+    expect(script).toContain("outside the screenshot viewport");
   });
 });
