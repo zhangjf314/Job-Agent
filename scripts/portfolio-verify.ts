@@ -30,6 +30,9 @@ async function verify() {
     throw new Error("Portfolio demo profile count is not stable.");
   }
   const profile = user.profiles[0];
+  const photo = await prisma.profilePhotoAsset.findUnique({
+    where: { profileId: profile.id },
+  });
   const [jobs, tailored, logs] = await Promise.all([
     prisma.jobPost.count({ where: { contentHash: PORTFOLIO_DEMO_MARKER } }),
     prisma.tailoredResume.count({
@@ -75,6 +78,15 @@ async function verify() {
     throw new Error("Persisted tailored resume does not match compiler output.");
   }
   if (
+    !photo ||
+    photo.mimeType !== "image/webp" ||
+    photo.width !== 600 ||
+    photo.height !== 800 ||
+    photo.byteSize > 300 * 1024
+  ) {
+    throw new Error("Portfolio profile photo is missing or not normalized.");
+  }
+  if (
     profile.resumes.some(
       (resume) =>
         resume.createdAt.toISOString() !== PORTFOLIO_DEMO_TIMESTAMP ||
@@ -99,6 +111,11 @@ async function verify() {
     status: "passed",
     marker: PORTFOLIO_DEMO_MARKER,
     counts,
+    profilePhoto: {
+      count: 1,
+      format: photo.mimeType,
+      dimensions: `${photo.width}x${photo.height}`,
+    },
     planSchema: "passed",
     planValidation: "passed",
     compiler: "passed",

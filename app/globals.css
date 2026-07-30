@@ -1,3 +1,5 @@
+@import "react-easy-crop/react-easy-crop.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -114,7 +116,97 @@ body {
   color: #0f172a;
 }
 
+.resume-a4-shell {
+  box-sizing: border-box;
+  margin: 0 auto;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 10%);
+}
+
+.resume-a4-shell--standard {
+  width: min(210mm, 100%);
+  min-height: 297mm;
+  padding: 14mm;
+}
+
+.resume-a4-shell--smart {
+  width: min(210mm, 100%);
+  height: 296mm;
+  padding: 8mm;
+}
+
+.resume-fit-content {
+  transform-origin: top left;
+}
+
+.resume-fit-content--compact .resume-print {
+  font-size: 10.5pt;
+  line-height: 1.3;
+}
+
+.resume-fit-content--compact .resume-print h2 {
+  margin: 0.65rem 0 0.3rem;
+}
+
+.resume-fit-content--compact .resume-print h3 {
+  margin: 0.55rem 0 0.2rem;
+}
+
+.resume-fit-content--compact .resume-print p {
+  margin: 0.2rem 0;
+}
+
+.resume-fit-content--compact .resume-print ul {
+  margin-top: 0.2rem;
+  margin-bottom: 0.35rem;
+}
+
+.resume-fit-content--compact .resume-print li {
+  margin: 0.1rem 0;
+}
+
+.resume-profile-photo {
+  float: right;
+  width: 28mm;
+  height: 37.333mm;
+  margin: 0 0 4mm 7mm;
+}
+
+.resume-profile-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2mm;
+  object-fit: cover;
+}
+
+.resume-template[data-resume-template="photo"]::after {
+  display: block;
+  clear: both;
+  content: "";
+}
+
 @media print {
+  .resume-a4-shell {
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .resume-a4-shell--standard,
+  .resume-a4-shell--smart:not(.resume-a4-shell--one-page) {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .resume-a4-shell--one-page {
+    width: 210mm;
+    height: 296mm;
+    padding: 8mm;
+  }
+
   .resume-print h2,
   .resume-print h3 {
     break-after: avoid-page;

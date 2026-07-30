@@ -19,7 +19,12 @@ export const resumeInclude = {
     orderBy: { order: "asc" as const },
   },
   profile: {
-    include: careerProfileInclude,
+    include: {
+      ...careerProfileInclude,
+      photoAsset: {
+        select: { id: true, updatedAt: true },
+      },
+    },
   },
 } as const;
 
@@ -62,6 +67,7 @@ function mapCreate(input: ResumeCreateInput) {
     generationNotes: input.generationNotes,
     changeLog: cleanText(input.changeLog),
     isDefault: input.isDefault,
+    showPhoto: input.showPhoto ?? true,
     sections: {
       create: input.sections.map((section) => ({
         type: section.type,
@@ -213,6 +219,7 @@ export async function duplicateResume(id: string, db: DbClient = prisma) {
       generationNotes: [...resume.generationNotes, "由已有简历复制生成新版本。"],
       changeLog: resume.changeLog ?? "",
       isDefault: false,
+      showPhoto: resume.showPhoto,
       sections: resume.sections.map((section) => ({
         type: section.type,
         title: section.title,
@@ -253,6 +260,18 @@ export async function updateResumeTemplate(
   return db.resume.update({
     where: { id },
     data: { templateKey },
+    include: resumeInclude,
+  });
+}
+
+export async function updateResumePhotoVisibility(
+  id: string,
+  showPhoto: boolean,
+  db: DbClient = prisma,
+) {
+  return db.resume.update({
+    where: { id },
+    data: { showPhoto },
     include: resumeInclude,
   });
 }

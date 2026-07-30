@@ -106,6 +106,14 @@ async function main() {
       } else {
         await page.evaluate(() => window.scrollTo(0, 0));
       }
+      if ("click" in screenshot) {
+        await page.locator(screenshot.click).click();
+        await page.waitForFunction(() => {
+          const shell = document.querySelector("[data-fit-status]");
+          const status = shell?.getAttribute("data-fit-status");
+          return status && status !== "idle" && status !== "measuring";
+        });
+      }
       const scrolled = await page.evaluate(() => window.scrollY > 0);
       if (scrolled) {
         await banner.evaluate((element) => {

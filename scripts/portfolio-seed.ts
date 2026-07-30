@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   PORTFOLIO_DEMO_MARKER,
   PORTFOLIO_DEMO_TIMESTAMP,
@@ -8,6 +10,7 @@ import {
   portfolioProfileFixture,
 } from "./portfolio-fixtures";
 import { assertPortfolioDatabaseUrl } from "./portfolio-env";
+import { processProfilePhoto } from "../services/profile-photo-service";
 
 const prisma = new PrismaClient();
 const portfolioDemoTimestamp = new Date(PORTFOLIO_DEMO_TIMESTAMP);
@@ -126,6 +129,21 @@ async function seed() {
     },
   });
 
+  const demoPhoto = await processProfilePhoto({
+    bytes: readFileSync(resolve("public/demo/fictional-profile-photo.webp")),
+    declaredMimeType: "image/webp",
+    crop: { x: 0, y: 0, width: 100, height: 100 },
+  });
+  await prisma.profilePhotoAsset.create({
+    data: {
+      id: "portfolio-demo-photo-v1",
+      profileId: ids.profile,
+      ...demoPhoto,
+      createdAt: portfolioDemoTimestamp,
+      updatedAt: portfolioDemoTimestamp,
+    },
+  });
+
   await prisma.resume.create({
     data: {
       id: ids.baseResume,
@@ -135,7 +153,7 @@ async function seed() {
       targetCity: "杭州",
       type: "general",
       status: "active",
-      templateKey: "minimal",
+      templateKey: "photo",
       contentMarkdown: portfolioBaseResumeMarkdown,
       contentJson: json({ ...markerMetadata }),
       sourceProfileSnapshot: json({ ...markerMetadata }),
@@ -147,6 +165,7 @@ async function seed() {
       qualityWarnings: [],
       generationNotes: ["Demo Data / 虚构演示数据"],
       isDefault: true,
+      showPhoto: true,
       createdAt: portfolioDemoTimestamp,
       updatedAt: portfolioDemoTimestamp,
       sections: {
@@ -212,7 +231,7 @@ async function seed() {
       targetCity: "杭州",
       type: "jd_tailored",
       status: "active",
-      templateKey: "clean",
+      templateKey: "photo",
       contentMarkdown: compiled.publicResult.contentMarkdown,
       contentJson: json({
         ...markerMetadata,
@@ -231,6 +250,7 @@ async function seed() {
         "Demo Data / 虚构演示数据",
       ],
       isDefault: false,
+      showPhoto: true,
       createdAt: portfolioDemoTimestamp,
       updatedAt: portfolioDemoTimestamp,
       sections: {

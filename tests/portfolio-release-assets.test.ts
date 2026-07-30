@@ -18,8 +18,8 @@ describe("portfolio release assets", () => {
     ).size).toBe(PORTFOLIO_SCREENSHOTS.length);
   });
 
-  it("defines the stable 10-page capture flow", () => {
-    expect(PORTFOLIO_SCREENSHOTS).toHaveLength(10);
+  it("defines the stable 12-page capture flow", () => {
+    expect(PORTFOLIO_SCREENSHOTS).toHaveLength(12);
   });
 
   it("links all required documentation", () => {

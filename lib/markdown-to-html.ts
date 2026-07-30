@@ -40,6 +40,18 @@ export function markdownToHtml(markdown: string) {
       continue;
     }
 
+    const profilePhoto = trimmed.match(
+      /^\[\[PROFILE_PHOTO:(\/api\/profile\/photo\/[A-Za-z0-9_-]+(?:\?v=\d+)?)\]\]$/,
+    );
+    if (profilePhoto) {
+      flushParagraph();
+      flushList();
+      html.push(
+        `<div class="resume-profile-photo"><img src="${escapeHtml(profilePhoto[1])}" alt="证件照" width="600" height="800" /></div>`,
+      );
+      continue;
+    }
+
     const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       flushParagraph();

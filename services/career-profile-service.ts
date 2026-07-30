@@ -99,7 +99,12 @@ export async function getCareerProfiles(userId: string, db: DbClient = prisma) {
 export async function getCareerProfileById(id: string, db: DbClient = prisma) {
   return db.careerProfile.findUnique({
     where: { id },
-    include: careerProfileInclude,
+    include: {
+      ...careerProfileInclude,
+      photoAsset: {
+        select: { id: true, updatedAt: true },
+      },
+    },
   });
 }
 

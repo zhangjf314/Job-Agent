@@ -332,10 +332,24 @@ model CareerProfile {
   offerRecords             OfferRecord[]
   evaluations              EvaluationRecord[]
   llmCallLogs              LLMCallLog[]
+  photoAsset               ProfilePhotoAsset?
   createdAt                DateTime                        @default(now())
   updatedAt                DateTime                        @updatedAt
 
   @@index([userId])
+}
+
+model ProfilePhotoAsset {
+  id        String        @id @default(cuid())
+  profileId String        @unique
+  data      Bytes
+  mimeType  String
+  width     Int
+  height    Int
+  byteSize  Int
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  profile   CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 }
 
 model BasicInfo {
@@ -484,6 +498,7 @@ model Resume {
   generationNotes        String[]
   changeLog              String?
   isDefault              Boolean          @default(false)
+  showPhoto              Boolean          @default(true)
   sections               ResumeSection[]
   jobDescriptions        JobDescription[]
   jdAnalyses             JDAnalysis[]

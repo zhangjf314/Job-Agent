@@ -4,6 +4,7 @@ import { Copy, Download, FileText, Save, Star } from "lucide-react";
 import { ErrorPanel } from "@/components/error-panel";
 import { ResumeDocument } from "@/components/resume-document";
 import { ResumeTemplateSelector } from "@/components/resume-template-selector";
+import { ProfilePhotoEditor } from "@/components/profile-photo-editor";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import {
   deleteResumeAction,
   duplicateResumeAction,
   saveResumeContentAction,
+  saveResumePhotoVisibilityAction,
   saveResumeTemplateAction,
   setDefaultResumeAction,
 } from "../actions";
@@ -91,6 +93,30 @@ export default async function ResumeDetailPage({ params }: Props) {
               <form action={saveResumeTemplateAction.bind(null, resume.id)} className="space-y-4">
                 <ResumeTemplateSelector defaultValue={resume.templateKey} />
                 <Button type="submit" className="w-full">保存模板并刷新预览</Button>
+              </form>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>证件照</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <ProfilePhotoEditor
+                profileId={resume.profileId}
+                initialHasPhoto={Boolean(resume.profile.photoAsset)}
+                compact
+              />
+              <p className="text-xs text-muted-foreground">
+                上传后会同步更新职业档案中的主证件照。
+              </p>
+              <form action={saveResumePhotoVisibilityAction.bind(null, resume.id)} className="space-y-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="showPhoto"
+                    defaultChecked={resume.showPhoto}
+                  />
+                  显示职业档案证件照
+                </label>
+                <Button type="submit" variant="outline" className="w-full">保存照片显示设置</Button>
               </form>
             </CardContent>
           </Card>

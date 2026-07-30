@@ -9,6 +9,7 @@ import {
   generateGeneralResumeFromProfile,
   setDefaultResume,
   updateResumeContent,
+  updateResumePhotoVisibility,
   updateResumeTemplate,
 } from "@/services/resume-service";
 import { resumeTemplateKeySchema } from "@/schemas/resume";
@@ -34,6 +35,12 @@ export async function saveResumeTemplateAction(id: string, formData: FormData) {
   revalidatePath("/resume");
   revalidatePath(`/resume/${id}`);
   revalidatePath(`/resume/${id}/download`);
+  revalidatePath(`/resume/${id}/pdf`);
+}
+
+export async function saveResumePhotoVisibilityAction(id: string, formData: FormData) {
+  await updateResumePhotoVisibility(id, formData.get("showPhoto") === "on");
+  revalidatePath(`/resume/${id}`);
   revalidatePath(`/resume/${id}/pdf`);
 }
 

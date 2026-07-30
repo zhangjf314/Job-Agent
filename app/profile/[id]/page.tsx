@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { generateGeneralResumeAction } from "@/app/resume/actions";
 import { generateCareerStrategyAction } from "@/app/strategy/actions";
 import { CareerProfileForm } from "@/components/career-profile-form";
+import { ProfilePhotoEditor } from "@/components/profile-photo-editor";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCareerProfileById } from "@/services/career-profile-service";
 import { getLatestCareerStrategyPlanByProfileId } from "@/services/strategy-service";
 import { deleteCareerProfileAction, updateCareerProfileAction } from "../actions";
@@ -46,6 +48,17 @@ export default async function ProfileDetailPage({ params }: Props) {
           </form>
         </div>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>证件照</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProfilePhotoEditor
+            profileId={profile.id}
+            initialHasPhoto={Boolean(profile.photoAsset)}
+          />
+        </CardContent>
+      </Card>
       <CareerProfileForm
         mode="edit"
         defaultValues={toCareerProfileFormValues(profile)}
