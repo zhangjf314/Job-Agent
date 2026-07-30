@@ -2,11 +2,12 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCareerProfiles, getOrCreateDemoUser } from "@/services/career-profile-service";
+import { getCareerProfiles } from "@/services/career-profile-service";
+import { getCurrentUser } from "@/services/auth/current-user";
 import { getApplicationPipelineSummary, listApplicationsByProfileId } from "@/services/applications/application-service";
 
 export default async function ApplicationsPage() {
-  const user = await getOrCreateDemoUser();
+  const user = await getCurrentUser();
   const profiles = await getCareerProfiles(user.id);
   const applications = (await Promise.all(profiles.map((profile) => listApplicationsByProfileId(profile.id)))).flat();
   const summary = profiles[0] ? await getApplicationPipelineSummary(profiles[0].id) : null;

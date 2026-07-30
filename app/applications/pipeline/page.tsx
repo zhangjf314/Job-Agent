@@ -2,13 +2,14 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCareerProfiles, getOrCreateDemoUser } from "@/services/career-profile-service";
+import { getCareerProfiles } from "@/services/career-profile-service";
+import { getCurrentUser } from "@/services/auth/current-user";
 import { listApplicationsByProfileId } from "@/services/applications/application-service";
 
 const statuses = ["planned", "applied", "resume_screen", "written_test", "interviewing", "offer", "rejected", "no_response", "review"] as const;
 
 export default async function ApplicationPipelinePage() {
-  const user = await getOrCreateDemoUser();
+  const user = await getCurrentUser();
   const profiles = await getCareerProfiles(user.id);
   const applications = (await Promise.all(profiles.map((profile) => listApplicationsByProfileId(profile.id)))).flat();
 
