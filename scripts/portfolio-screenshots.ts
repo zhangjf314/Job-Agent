@@ -106,6 +106,23 @@ async function main() {
       } else {
         await page.evaluate(() => window.scrollTo(0, 0));
       }
+      const scrolled = await page.evaluate(() => window.scrollY > 0);
+      if (scrolled) {
+        await banner.evaluate((element) => {
+          const bannerElement = element as HTMLElement;
+          bannerElement.style.position = "fixed";
+          bannerElement.style.inset = "0 0 auto 0";
+          bannerElement.style.zIndex = "9999";
+        });
+      }
+      const bannerBox = await banner.boundingBox();
+      if (
+        !bannerBox ||
+        bannerBox.y < 0 ||
+        bannerBox.y + bannerBox.height > 1024
+      ) {
+        throw new Error(`Demo banner is outside the screenshot viewport on ${screenshot.path}.`);
+      }
       await page.screenshot({
         path: resolve(outputDirectory, screenshot.filename),
         animations: "disabled",
