@@ -91,7 +91,7 @@ Factuality violations: 0
 
 ## 工程质量
 
-- 63 个测试文件、615 项自动化测试
+- 63 个测试文件、618 项自动化测试
 - Linux 与 Windows GitHub Actions
 - Prisma migrations：10
 - TypeScript、ESLint、Prisma validate、Production Build 全部门禁
