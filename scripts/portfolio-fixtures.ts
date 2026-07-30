@@ -25,6 +25,7 @@ import {
 import { tailoredResumeResultSchema } from "@/schemas/jd";
 
 export const PORTFOLIO_DEMO_MARKER = "portfolio-demo-v1";
+export const PORTFOLIO_DEMO_TIMESTAMP = "2026-07-30T10:08:57.000Z";
 
 export const portfolioProfileFixture: ResumeProfile = {
   id: "portfolio-demo-profile-v1",

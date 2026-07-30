@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import {
   PORTFOLIO_DEMO_MARKER,
+  PORTFOLIO_DEMO_TIMESTAMP,
   buildPortfolioCompiledResume,
   portfolioBaseResumeMarkdown,
   portfolioJDAnalysis,
@@ -9,6 +10,7 @@ import {
 import { assertPortfolioDatabaseUrl } from "./portfolio-env";
 
 const prisma = new PrismaClient();
+const portfolioDemoTimestamp = new Date(PORTFOLIO_DEMO_TIMESTAMP);
 const ids = {
   user: "portfolio-demo-user-v1",
   profile: "portfolio-demo-profile-v1",
@@ -145,6 +147,8 @@ async function seed() {
       qualityWarnings: [],
       generationNotes: ["Demo Data / 虚构演示数据"],
       isDefault: true,
+      createdAt: portfolioDemoTimestamp,
+      updatedAt: portfolioDemoTimestamp,
       sections: {
         create: [
           { type: "education", title: "教育经历", contentMarkdown: "东海理工大学（虚构） · 软件工程 · 本科", order: 0 },
@@ -227,6 +231,8 @@ async function seed() {
         "Demo Data / 虚构演示数据",
       ],
       isDefault: false,
+      createdAt: portfolioDemoTimestamp,
+      updatedAt: portfolioDemoTimestamp,
       sections: {
         create: compiled.publicResult.sections.map((section) => ({
           type: section.type as never,
@@ -481,6 +487,7 @@ async function seed() {
         status: "success",
         fallbackUsed: false,
         metadata: json(log.metadata),
+        createdAt: portfolioDemoTimestamp,
       },
     });
   }

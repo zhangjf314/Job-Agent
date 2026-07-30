@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import {
   PORTFOLIO_DEMO_MARKER,
+  PORTFOLIO_DEMO_TIMESTAMP,
   buildPortfolioCompiledResume,
   portfolioProfileFixture,
 } from "./portfolio-fixtures";
@@ -72,6 +73,18 @@ async function verify() {
   }
   if (persisted.contentMarkdown !== compiled.publicResult.contentMarkdown) {
     throw new Error("Persisted tailored resume does not match compiler output.");
+  }
+  if (
+    profile.resumes.some(
+      (resume) =>
+        resume.createdAt.toISOString() !== PORTFOLIO_DEMO_TIMESTAMP ||
+        resume.updatedAt.toISOString() !== PORTFOLIO_DEMO_TIMESTAMP,
+    ) ||
+    logs.some(
+      (log) => log.createdAt.toISOString() !== PORTFOLIO_DEMO_TIMESTAMP,
+    )
+  ) {
+    throw new Error("Portfolio screenshot timestamps are not deterministic.");
   }
   if (
     logs.some((log) => {
