@@ -1,5 +1,9 @@
 import type { ResumeProfile } from "../services/resume-generator";
 import type { JDAnalysisResult } from "../types/jd";
+import {
+  atomizeProject,
+  projectStableKey,
+} from "../services/project-facts/project-fact-atomizer";
 
 export const fictionalSmokeProfile = {
   id: "fictional-smoke-profile",
@@ -61,6 +65,33 @@ export const fictionalSmokeProfile = {
   evidenceItems: [],
   languageItems: [],
   preference: null,
+} as unknown as ResumeProfile;
+
+const projectRewriteSmokeProjectId = "fictional-smoke-project";
+const projectRewriteSmokeStableKey = projectStableKey("课程任务管理系统");
+const projectRewriteSmokeSource = {
+  ...fictionalSmokeProfile.projectItems[0],
+  id: projectRewriteSmokeProjectId,
+  stableKey: projectRewriteSmokeStableKey,
+  projectType: "课程项目",
+  fullDescription: "- 开发任务创建、编辑、筛选和状态管理\n- 使用 Zod 进行输入校验\n- 编写基础单元测试",
+  challenges: ["保持多条件筛选与任务状态一致"],
+  solutions: ["统一筛选参数与状态校验"],
+  engineeringPractices: ["编写基础单元测试"],
+};
+
+/** Dedicated fictional profile for the one-request project rewrite smoke. */
+export const fictionalProjectRewriteSmokeProfile = {
+  ...fictionalSmokeProfile,
+  projectItems: [{
+    ...projectRewriteSmokeSource,
+    factAtoms: atomizeProject(projectRewriteSmokeSource).map((atom, index) => ({
+      ...atom,
+      id: `fictional-smoke-project-atom-${index + 1}`,
+      createdAt: new Date("2026-08-02T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-02T00:00:00.000Z"),
+    })),
+  }],
 } as unknown as ResumeProfile;
 
 export const fictionalSmokeJD: JDAnalysisResult = {

@@ -7,8 +7,29 @@ import {
   smokeRequestPolicy,
 } from "@/scripts/llm-smoke-selection";
 import { createSmokeRequestLimiter } from "@/scripts/llm-smoke-request-limit";
+import { fictionalProjectRewriteSmokeProfile } from "@/scripts/llm-smoke-fixtures";
+import {
+  buildCandidateFactRegistry,
+  isProjectCandidateFact,
+} from "@/services/ai/candidate-fact-registry";
+import { readFileSync } from "node:fs";
 
 describe("LLM smoke selection", () => {
+  it("uses a fictional atomized project for the one-request rewrite smoke", () => {
+    const facts = buildCandidateFactRegistry(fictionalProjectRewriteSmokeProfile);
+    expect(facts.filter(isProjectCandidateFact).length).toBeGreaterThan(0);
+    expect(fictionalProjectRewriteSmokeProfile.projectItems[0].fullDescription).toBeTruthy();
+  });
+
+  it("reports project pipeline statuses and only safe aggregate smoke fields", () => {
+    const source = readFileSync("scripts/llm-smoke.ts", "utf8");
+    for (const field of [
+      "projectPlanStatus", "projectPlanValidationStatus", "projectCompilationStatus",
+      "projectCountAvailable", "projectCountSelected", "projectRewritePlanCount",
+      "projectBulletCount", "projectFactualityViolationCount", "projectEvidenceSubsetVerified",
+    ]) expect(source).toContain(field);
+    expect(source).not.toContain("console.log(projectFacts");
+  });
   it("keeps the default full smoke behavior", () => {
     expect([...parseSmokeSelection([])]).toEqual(smokeCases);
   });
