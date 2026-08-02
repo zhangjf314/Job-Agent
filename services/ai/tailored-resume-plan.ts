@@ -34,6 +34,18 @@ export const PROJECT_REWRITE_PATTERNS = [
 
 export type ProjectRewritePattern = (typeof PROJECT_REWRITE_PATTERNS)[number];
 
+export const PROJECT_REWRITE_PATTERN_CONTRACT = [
+  "Pattern/category requirements (factIds in the stated order):",
+  "action_technology = responsibility|feature|solution|engineering, then technology(strength used|implemented|designed|led|achieved).",
+  "action_solution = responsibility|feature|challenge, then solution(strength used|implemented|designed|led|achieved).",
+  "feature_implementation = feature(strength implemented|designed|led|achieved), then technology(strength used|implemented|designed|led|achieved).",
+  "problem_solution = challenge, then solution(strength used|implemented|designed|led|achieved).",
+  "solution_result = solution(strength used|implemented|designed|led|achieved), then result|metric(strength achieved).",
+  "engineering_quality = engineering(strength designed|led|achieved), then result|metric(strength achieved).",
+  "responsibility_result = responsibility(strength implemented|designed|led|achieved), then result|metric(strength achieved).",
+  "Select exactly the required same-project atoms for each bullet; do not add unrelated atom IDs.",
+].join("\n");
+
 export const canonicalSectionTypeSchema = z.enum(
   GROUNDED_SECTION_TYPES_BY_POSITION,
 );
@@ -103,6 +115,7 @@ export const tailoredResumePlanOutputContract = [
   `priorityFactIds is 0..${TAILORED_RESUME_PLAN_LIMITS.priorityFactIdsMax} selected F_* IDs in descending priority.`,
   "Only select supplied candidate F_* IDs. Never output J_REQ_* or unknown IDs.",
   `projectRewrites is 0..${TAILORED_RESUME_PLAN_LIMITS.projectRewritesMax} entries, total bullets 0..${TAILORED_RESUME_PLAN_LIMITS.projectBulletsTotalMax}; each entry exactly {projectId:P_PROJECT_*,bullets:[{pattern:${PROJECT_REWRITE_PATTERNS.join("|")},factIds:F_PROJECT_*[]}]}. Every bullet may use only atoms under that same projectId.`,
+  PROJECT_REWRITE_PATTERN_CONTRACT,
   "No resume text, titles, lines, emails, messages, GroundedText, kind, order, sourceFactIds, or arbitrary JSON paths.",
 ].join(" ");
 
@@ -128,6 +141,7 @@ export function buildTailoredResumePlanMessages(
         "Do not add technologies, metrics, roles or results.",
         "Do not treat JD requirements as candidate experience.",
         "Return only the strict JSON plan.",
+        PROJECT_REWRITE_PATTERN_CONTRACT,
       ].join("\n"),
     },
     {

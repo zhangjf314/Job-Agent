@@ -15,7 +15,11 @@ import {
 import {
   compileProjectDescriptions,
 } from "@/services/ai/project-description-compiler";
-import type { TailoredResumePlan } from "@/services/ai/tailored-resume-plan";
+import {
+  PROJECT_REWRITE_PATTERN_CONTRACT,
+  tailoredResumePlanOutputContract,
+  type TailoredResumePlan,
+} from "@/services/ai/tailored-resume-plan";
 import {
   validateTailoredResumePlan,
 } from "@/services/ai/tailored-resume-plan-validator";
@@ -193,6 +197,17 @@ describe("project fact atomization and registry", () => {
 });
 
 describe("project rewrite plan validation", () => {
+  it("gives the model an explicit category and strength contract for every pattern", () => {
+    for (const pattern of [
+      "action_technology", "action_solution", "feature_implementation", "problem_solution",
+      "solution_result", "engineering_quality", "responsibility_result",
+    ]) {
+      expect(PROJECT_REWRITE_PATTERN_CONTRACT).toContain(`${pattern} =`);
+      expect(tailoredResumePlanOutputContract).toContain(`${pattern} =`);
+    }
+    expect(PROJECT_REWRITE_PATTERN_CONTRACT).toContain("factIds in the stated order");
+    expect(PROJECT_REWRITE_PATTERN_CONTRACT).toContain("same-project atoms");
+  });
   it("accepts same-project atoms and reports project diagnostics", () => {
     const { registry, projects, descriptors } = setup();
     const action = fact(projects, 0, "responsibility");
