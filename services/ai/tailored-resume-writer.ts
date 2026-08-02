@@ -13,10 +13,13 @@ import {
   buildCandidateFactRegistry,
   buildCandidateFactRenderDescriptors,
   buildJobRequirementFacts,
+  isProjectCandidateFact,
+  selectProjectFactsForPrompt,
   formatFactRegistryForPrompt,
   formatJobRequirementsForPrompt,
   type CandidateFact,
   type JobRequirementFact,
+  type ProjectCandidateFact,
 } from "./candidate-fact-registry";
 import {
   groundedTailoredResumeOutputContract,
@@ -79,6 +82,11 @@ import {
   type GroundedCompilerDiagnostics,
 } from "./tailored-resume-grounded-compiler";
 import type { PipelineStageStatus } from "./pipeline-stage-status";
+import { ProjectDescriptionCompilerError } from "./project-description-compiler";
+import {
+  evaluateProjectDescriptionFactuality,
+  ProjectDescriptionFactualityError,
+} from "./project-description-factuality";
 
 export type TailoredResumeWriterInput = {
   profile: ResumeProfile;
@@ -97,6 +105,9 @@ export type TailoredResumeDiagnostics = {
   planSchemaStatus: PipelineStageStatus;
   planValidationStatus: PipelineStageStatus;
   compilerStatus: PipelineStageStatus;
+  projectPlanStatus: PipelineStageStatus;
+  projectPlanValidationStatus: PipelineStageStatus;
+  projectCompilationStatus: PipelineStageStatus;
   selectedFactCount: number;
   renderedFactCount: number;
   omittedFactCount: number;
@@ -106,6 +117,18 @@ export type TailoredResumeDiagnostics = {
   compilerMaximumLineLength: number;
   compilerMaximumSourceFactIds: number;
   applicationMaterialLineCounts: number[];
+  projectCountAvailable: number;
+  projectCountSelected: number;
+  projectRewritePlanCount: number;
+  projectBulletPlanCount: number;
+  projectAtomCountAvailable: number;
+  projectAtomCountSelected: number;
+  projectAtomCountRendered: number;
+  projectAtomCountOmitted: number;
+  projectBulletCount: number;
+  maximumProjectBulletLength: number;
+  maximumProjectBulletFactCount: number;
+  projectFactualityViolationCount: number;
   factualityStatus: FactualityStatus;
   factualityViolationCount: number;
   factualityViolationCategories: string[];
@@ -181,6 +204,9 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         planSchemaStatus: "not_reached",
         planValidationStatus: "not_reached",
         compilerStatus: "not_reached",
+        projectPlanStatus: "not_reached",
+        projectPlanValidationStatus: "not_reached",
+        projectCompilationStatus: "not_reached",
         selectedFactCount: 0,
         renderedFactCount: 0,
         omittedFactCount: 0,
@@ -190,6 +216,18 @@ export class MockTailoredResumeWriterProvider implements TailoredResumeWriterPro
         compilerMaximumLineLength: 0,
         compilerMaximumSourceFactIds: 0,
         applicationMaterialLineCounts: [],
+        projectCountAvailable: 0,
+        projectCountSelected: 0,
+        projectRewritePlanCount: 0,
+        projectBulletPlanCount: 0,
+        projectAtomCountAvailable: 0,
+        projectAtomCountSelected: 0,
+        projectAtomCountRendered: 0,
+        projectAtomCountOmitted: 0,
+        projectBulletCount: 0,
+        maximumProjectBulletLength: 0,
+        maximumProjectBulletFactCount: 0,
+        projectFactualityViolationCount: 0,
         factualityStatus: "pass",
         factualityViolationCount: 0,
         factualityViolationCategories: [],
@@ -348,6 +386,9 @@ function diagnostics(
     planSchemaStatus: "not_reached",
     planValidationStatus: "not_reached",
     compilerStatus: "not_reached",
+    projectPlanStatus: "not_reached",
+    projectPlanValidationStatus: "not_reached",
+    projectCompilationStatus: "not_reached",
     selectedFactCount: 0,
     renderedFactCount: 0,
     omittedFactCount: 0,
@@ -357,6 +398,18 @@ function diagnostics(
     compilerMaximumLineLength: 0,
     compilerMaximumSourceFactIds: 0,
     applicationMaterialLineCounts: [],
+    projectCountAvailable: 0,
+    projectCountSelected: 0,
+    projectRewritePlanCount: 0,
+    projectBulletPlanCount: 0,
+    projectAtomCountAvailable: 0,
+    projectAtomCountSelected: 0,
+    projectAtomCountRendered: 0,
+    projectAtomCountOmitted: 0,
+    projectBulletCount: 0,
+    maximumProjectBulletLength: 0,
+    maximumProjectBulletFactCount: 0,
+    projectFactualityViolationCount: 0,
     factualityStatus: report.status,
     factualityViolationCount: report.violations.length,
     factualityViolationCategories: [...new Set(report.violations.map((item) => item.category))],
@@ -844,6 +897,9 @@ function withCompilerDiagnostics(
     planSchemaStatus: "passed",
     planValidationStatus: "passed",
     compilerStatus: "passed",
+    projectPlanStatus: "passed",
+    projectPlanValidationStatus: "passed",
+    projectCompilationStatus: "passed",
     selectedFactCount: compiler.selectedFactCount,
     renderedFactCount: compiler.renderedFactCount,
     omittedFactCount: compiler.omittedFactCount,
@@ -854,7 +910,62 @@ function withCompilerDiagnostics(
     compilerMaximumSourceFactIds: compiler.maximumSourceFactIds,
     applicationMaterialLineCounts:
       compiler.applicationMaterialLineCounts,
+    projectCountSelected: compiler.projectRewriteCount,
+    projectRewritePlanCount: compiler.projectRewriteCount,
+    projectBulletPlanCount: compiler.projectBulletCount,
+    projectAtomCountSelected: compiler.projectAtomSelectionCount,
+    projectAtomCountRendered: compiler.projectRenderedAtomCount,
+    projectBulletCount: compiler.projectBulletCount,
+    maximumProjectBulletLength: compiler.projectMaximumLineLength,
+    maximumProjectBulletFactCount: compiler.projectMaximumBulletFactCount,
   };
+}
+
+function buildProjectComparison(
+  profile: ResumeProfile,
+  projectFacts: ProjectCandidateFact[],
+  compiled: ReturnType<typeof compileGroundedTailoredResume>["compiledProjectBullets"],
+): NonNullable<TailoredResumeResult["projectComparison"]> {
+  const factById = new Map(projectFacts.map((fact) => [fact.id, fact]));
+  const grouped = new Map<string, typeof compiled>();
+  for (const bullet of compiled) {
+    const group = grouped.get(bullet.projectId) ?? [];
+    group.push(bullet);
+    grouped.set(bullet.projectId, group);
+  }
+  return [...grouped.entries()].flatMap(([projectReference, bullets]) => {
+    const firstFact = factById.get(bullets[0]?.sourceFactIds[0] ?? "");
+    if (!firstFact) return [];
+    const project = profile.projectItems.find(
+      (item) => item.id === firstFact.project.internalProjectId,
+    );
+    if (!project) return [];
+    const evidenceFacts = [...new Set(bullets.flatMap((bullet) => bullet.sourceFactIds))]
+      .map((id) => factById.get(id))
+      .filter((fact): fact is ProjectCandidateFact => Boolean(fact));
+    const originalDescription = project.fullDescription?.trim() || [
+      project.background,
+      project.goal,
+      ...(project.responsibilities ?? []),
+      ...(project.highlights ?? []),
+      project.results,
+      ...(project.metrics ?? []),
+    ].filter(Boolean).join("；");
+    return [{
+      projectReference,
+      projectName: project.name,
+      projectType: project.projectType ?? null,
+      role: project.role ?? null,
+      originalDescription,
+      tailoredBullets: bullets.map((bullet) => bullet.text),
+      evidence: evidenceFacts.map((fact) => ({
+        category: fact.project.category,
+        canonicalText: fact.text,
+        assertionStrength: fact.project.assertionStrength,
+      })),
+      patterns: bullets.map((bullet) => bullet.pattern),
+    }];
+  });
 }
 
 /**
@@ -883,8 +994,13 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         .map((descriptor) => descriptor.factId),
     );
     const selectableFacts = candidateFacts.filter((fact) =>
-      renderableIds.has(fact.id),
+      renderableIds.has(fact.id) && !isProjectCandidateFact(fact),
     );
+    const projectPromptSelection = selectProjectFactsForPrompt(candidateFacts);
+    const validationFacts = [
+      ...selectableFacts,
+      ...projectPromptSelection.facts,
+    ];
     const jobRequirements = buildJobRequirementFacts(
       input.jdAnalysis,
       candidateFacts,
@@ -898,9 +1014,10 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       messages: buildTailoredResumePlanMessages(
         selectableFacts,
         jobRequirements,
+        projectPromptSelection.facts,
       ),
-      allowTransportRetry: input.requestPolicy?.allowTransportRetry,
-      allowJsonRepair: input.requestPolicy?.allowJsonRepair,
+      allowTransportRetry: false,
+      allowJsonRepair: false,
       allowFinalizationRetry: false,
     });
 
@@ -908,8 +1025,9 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
     try {
       validated = validateTailoredResumePlan(
         planCompletion.data,
-        selectableFacts,
+        validationFacts,
         renderDescriptors,
+        projectPromptSelection.facts,
       );
     } catch (error) {
       if (error instanceof TailoredResumePlanError) {
@@ -930,6 +1048,9 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             planSchemaStatus: "passed",
             planValidationStatus: "failed",
             compilerStatus: "not_reached",
+            projectPlanStatus: "passed",
+            projectPlanValidationStatus: "failed",
+            projectCompilationStatus: "not_reached",
             selectedFactCount:
               error.diagnostics?.selectedFactCount ?? 0,
             selectedReferenceCount:
@@ -951,7 +1072,10 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         jdAnalysis: input.jdAnalysis,
       });
     } catch (error) {
-      if (error instanceof DeterministicGroundedCompilerError) {
+      if (
+        error instanceof DeterministicGroundedCompilerError ||
+        error instanceof ProjectDescriptionCompilerError
+      ) {
         await this.client.recordSafeObservation({
           operation: "tailored_resume_result",
           provider: "llm_provider",
@@ -969,6 +1093,9 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
             planSchemaStatus: "passed",
             planValidationStatus: "passed",
             compilerStatus: "failed",
+            projectPlanStatus: "passed",
+            projectPlanValidationStatus: "passed",
+            projectCompilationStatus: "failed",
             selectedFactCount:
               validated.diagnostics.selectedFactCount,
             selectedReferenceCount:
@@ -982,6 +1109,10 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       compiled.grounded,
       candidateFacts,
       jobRequirements,
+    );
+    const projectFactuality = evaluateProjectDescriptionFactuality(
+      compiled.compiledProjectBullets,
+      candidateFacts.filter(isProjectCandidateFact),
     );
     const groundedCompletion: GroundedCompletion = {
       data: compiled.grounded,
@@ -997,7 +1128,8 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         schemaValidationStatus: "passed",
       },
     };
-    const finalDiagnostics = withCompilerDiagnostics(
+    const finalDiagnostics = {
+      ...withCompilerDiagnostics(
       diagnostics(
         report,
         groundedCompletion,
@@ -1006,21 +1138,31 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         createEmptyFactualityRepairDiagnostics(0),
       ),
       compiled.diagnostics,
-    );
+      ),
+      projectCountAvailable: new Set(
+        candidateFacts.filter(isProjectCandidateFact).map((fact) => fact.project.projectReference),
+      ).size,
+      projectAtomCountAvailable: candidateFacts.filter(isProjectCandidateFact).length,
+      projectAtomCountOmitted: projectPromptSelection.omittedAtomCount +
+        Math.max(0, compiled.diagnostics.projectAtomSelectionCount - compiled.diagnostics.projectRenderedAtomCount),
+      projectFactualityViolationCount: projectFactuality.violations.length,
+    };
 
     await this.client.recordSafeObservation({
       operation: "tailored_resume_result",
       provider: "llm_provider",
       model: planCompletion.metadata.model,
-      status: report.status === "pass" ? "success" : "failed",
+      status: report.status === "pass" && projectFactuality.status === "pass" ? "success" : "failed",
       durationMs: Date.now() - startedAt,
       promptTokens: finalDiagnostics.inputTokens,
       completionTokens: finalDiagnostics.outputTokens,
       totalTokens: finalDiagnostics.totalTokens,
       errorCode:
-        report.status === "pass"
+        report.status === "pass" && projectFactuality.status === "pass"
           ? undefined
-          : "DETERMINISTIC_COMPILER_FACTUALITY_BUG",
+          : projectFactuality.status === "fail"
+            ? "PROJECT_DESCRIPTION_FACTUALITY_VIOLATION"
+            : "DETERMINISTIC_COMPILER_FACTUALITY_BUG",
       fallbackUsed: false,
       metadata: {
         requestId: planCompletion.metadata.requestId,
@@ -1029,6 +1171,9 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
         planJsonStatus: finalDiagnostics.planJsonStatus,
         planSchemaStatus: finalDiagnostics.planSchemaStatus,
         planValidationStatus: finalDiagnostics.planValidationStatus,
+        projectPlanStatus: finalDiagnostics.projectPlanStatus,
+        projectPlanValidationStatus: finalDiagnostics.projectPlanValidationStatus,
+        projectCompilationStatus: finalDiagnostics.projectCompilationStatus,
         compilerStatus: finalDiagnostics.compilerStatus,
         jsonStatus: "passed",
         normalizationStatus: "passed",
@@ -1060,6 +1205,18 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
           finalDiagnostics.compilerMaximumSourceFactIds,
         applicationMaterialLineCounts:
           finalDiagnostics.applicationMaterialLineCounts,
+        projectCountAvailable: finalDiagnostics.projectCountAvailable,
+        projectCountSelected: finalDiagnostics.projectCountSelected,
+        projectRewritePlanCount: finalDiagnostics.projectRewritePlanCount,
+        projectBulletPlanCount: finalDiagnostics.projectBulletPlanCount,
+        projectAtomCountAvailable: finalDiagnostics.projectAtomCountAvailable,
+        projectAtomCountSelected: finalDiagnostics.projectAtomCountSelected,
+        projectAtomCountRendered: finalDiagnostics.projectAtomCountRendered,
+        projectAtomCountOmitted: finalDiagnostics.projectAtomCountOmitted,
+        projectBulletCount: finalDiagnostics.projectBulletCount,
+        maximumProjectBulletLength: finalDiagnostics.maximumProjectBulletLength,
+        maximumProjectBulletFactCount: finalDiagnostics.maximumProjectBulletFactCount,
+        projectFactualityViolationCount: finalDiagnostics.projectFactualityViolationCount,
       },
     });
 
@@ -1071,8 +1228,18 @@ export class LLMTailoredResumeWriterProvider implements TailoredResumeWriterProv
       failure.diagnostics = finalDiagnostics;
       throw failure;
     }
+    if (projectFactuality.status !== "pass") {
+      throw new ProjectDescriptionFactualityError(projectFactuality);
+    }
     return {
-      result: stripGroundingMetadata(compiled.grounded),
+      result: {
+        ...stripGroundingMetadata(compiled.grounded),
+        projectComparison: buildProjectComparison(
+          input.profile,
+          candidateFacts.filter(isProjectCandidateFact),
+          compiled.compiledProjectBullets,
+        ),
+      },
       diagnostics: finalDiagnostics,
     };
   }

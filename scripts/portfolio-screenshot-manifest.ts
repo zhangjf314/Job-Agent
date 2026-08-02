@@ -32,4 +32,20 @@ export const PORTFOLIO_SCREENSHOTS = [
     selector: "[data-print-controls]",
     click: "[data-print-mode-option='smart']",
   },
+  {
+    filename: "13-project-fact-editor.png",
+    path: "/profile/portfolio-demo-profile-v1",
+    selector: "[data-project-fact-editor]",
+  },
+  {
+    filename: "14-tailored-project-description.png",
+    path: "/resume/portfolio-demo-tailored-resume-v1",
+    selector: "[data-portfolio-tailored-project-description='1']",
+    click: "[data-portfolio-project-evidence='1'] summary",
+  },
+  {
+    filename: "15-project-description-comparison.png",
+    path: "/resume/portfolio-demo-tailored-resume-v1",
+    selector: "[data-portfolio-project-comparison]",
+  },
 ] as const;

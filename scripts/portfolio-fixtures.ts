@@ -4,7 +4,12 @@ import {
   buildCandidateFactRegistry,
   buildCandidateFactRenderDescriptors,
   buildJobRequirementFacts,
+  isProjectCandidateFact,
 } from "@/services/ai/candidate-fact-registry";
+import {
+  atomizeProject,
+  projectStableKey,
+} from "@/services/project-facts/project-fact-atomizer";
 import {
   tailoredResumePlanSchema,
   type TailoredResumePlan,
@@ -73,13 +78,18 @@ export const portfolioProfileFixture: ResumeProfile = {
   projectItems: [
     {
       name: "CampusFlow 校园活动平台",
+      projectType: "课程项目",
       role: "课程项目成员",
       background: "软件工程课程项目",
       goal: "实现校园活动发布、报名与状态管理",
+      fullDescription: "- 实现活动列表、报名流程与状态管理\n- 使用 React 构建交互页面\n- 建立基础组件测试与代码检查",
       responsibilities: ["实现活动列表和报名流程", "使用 React 构建交互页面"],
       techStack: ["TypeScript", "React", "Next.js"],
       highlights: ["课程项目，数据与页面均为演示用途"],
-      results: null,
+      challenges: ["保持活动报名状态与页面展示一致"],
+      solutions: ["使用明确的状态字段驱动页面渲染"],
+      engineeringPractices: ["建立基础组件测试与代码检查"],
+      results: "完成课程验收演示",
       metrics: [],
       links: [],
       startDate: null,
@@ -87,13 +97,18 @@ export const portfolioProfileFixture: ResumeProfile = {
     },
     {
       name: "StudyBoard 课程任务管理系统",
+      projectType: "个人学习项目",
       role: "个人项目",
       background: "个人学习项目",
       goal: "管理课程任务与截止日期",
+      fullDescription: "- 实现任务增删改查\n- 设计 PostgreSQL 数据模型\n- 使用 Prisma 管理数据库访问",
       responsibilities: ["实现任务增删改查", "设计 PostgreSQL 数据模型"],
       techStack: ["Next.js", "PostgreSQL", "Prisma"],
       highlights: ["个人项目，不代表商业生产系统"],
-      results: null,
+      challenges: ["保持任务状态和截止日期数据一致"],
+      solutions: ["通过 Prisma Schema 统一数据约束"],
+      engineeringPractices: ["维护可重复执行的数据库迁移"],
+      results: "完成个人学习场景演示",
       metrics: [],
       links: [],
       startDate: null,
@@ -101,13 +116,18 @@ export const portfolioProfileFixture: ResumeProfile = {
     },
     {
       name: "InsightLite 数据分析看板",
+      projectType: "课程 Demo",
       role: "课程 Demo 项目",
       background: "数据分析课程 Demo",
       goal: "展示公开示例数据的基础统计结果",
+      fullDescription: "- 使用 Python 清洗示例数据\n- 制作基础统计图表\n- 校验输入数据字段",
       responsibilities: ["使用 Python 清洗示例数据", "制作基础统计图表"],
       techStack: ["Python", "PostgreSQL"],
       highlights: ["仅使用虚构和公开示例数据"],
-      results: null,
+      challenges: ["处理示例数据中的空值和字段差异"],
+      solutions: ["在统计前执行确定性数据清洗"],
+      engineeringPractices: ["增加输入字段校验"],
+      results: "完成课程数据分析展示",
       metrics: [],
       links: [],
       startDate: null,
@@ -178,17 +198,42 @@ function idsByCategory(
 }
 
 export function buildPortfolioCompiledResume() {
+  const profileWithFacts = {
+    ...portfolioProfileFixture,
+    projectItems: portfolioProfileFixture.projectItems.map((project, index) => {
+      const id = `portfolio-demo-project-${index + 1}`;
+      const stableKey = projectStableKey(project.name);
+      return {
+        ...project,
+        id,
+        stableKey,
+        factAtoms: atomizeProject({ ...project, id, stableKey }).map((atom, atomIndex) => ({
+          ...atom,
+          id: `${id}-atom-${atomIndex + 1}`,
+          createdAt: new Date(PORTFOLIO_DEMO_TIMESTAMP),
+          updatedAt: new Date(PORTFOLIO_DEMO_TIMESTAMP),
+        })),
+      };
+    }),
+  } as ResumeProfile;
   const facts = buildCandidateFactRegistry(
-    portfolioProfileFixture,
+    profileWithFacts,
     portfolioBaseResumeMarkdown,
   );
   const descriptors = buildCandidateFactRenderDescriptors(facts);
   const skills = idsByCategory(facts, ["skill"]).slice(0, 8);
   const projects = idsByCategory(facts, [
     "project",
-    "project_technology",
-    "project_responsibility",
   ]).slice(0, 10);
+  const projectFacts = facts.filter(isProjectCandidateFact);
+  const firstProjectReference = projectFacts[0]?.project.projectReference;
+  const secondProjectReference = projectFacts.find(
+    (fact) => fact.project.projectReference !== firstProjectReference,
+  )?.project.projectReference;
+  const pick = (projectReference: string | undefined, category: string) =>
+    projectFacts.find(
+      (fact) => fact.project.projectReference === projectReference && fact.project.category === category,
+    )?.id;
   const education = idsByCategory(facts, ["education"]);
   const plan: TailoredResumePlan = {
     sections: {
@@ -206,12 +251,29 @@ export function buildPortfolioCompiledResume() {
     },
     changedSections: ["skills", "projects"],
     priorityFactIds: [...skills, ...projects, ...education].slice(0, 20),
+    projectRewrites: [
+      {
+        projectId: firstProjectReference!,
+        bullets: [{
+          pattern: "action_technology",
+          factIds: [pick(firstProjectReference, "responsibility"), pick(firstProjectReference, "technology")].filter((id): id is string => Boolean(id)),
+        }],
+      },
+      {
+        projectId: secondProjectReference!,
+        bullets: [{
+          pattern: "action_solution",
+          factIds: [pick(secondProjectReference, "responsibility"), pick(secondProjectReference, "solution")].filter((id): id is string => Boolean(id)),
+        }],
+      },
+    ],
   };
   const schemaPlan = tailoredResumePlanSchema.parse(plan);
   const validated = validateTailoredResumePlan(
     schemaPlan,
     facts,
     descriptors,
+    projectFacts,
   );
   const compiled = compileGroundedTailoredResume({
     plan: validated.plan,
@@ -229,9 +291,32 @@ export function buildPortfolioCompiledResume() {
   if (factuality.status !== "pass" || factuality.violations.length > 0) {
     throw new Error("Portfolio compiler fixture failed factuality gate.");
   }
-  const publicResult = tailoredResumeResultSchema.parse(
-    stripGroundingMetadata(grounded),
-  );
+  const parsedPublicResult = tailoredResumeResultSchema.parse(stripGroundingMetadata(grounded));
+  const publicResult = {
+    ...parsedPublicResult,
+    projectComparison: compiled.compiledProjectBullets.map((bullet) => {
+      const sourceFacts = bullet.sourceFactIds
+        .map((id) => projectFacts.find((fact) => fact.id === id))
+        .filter((fact): fact is NonNullable<typeof fact> => Boolean(fact));
+      const sourceProject = profileWithFacts.projectItems.find(
+        (project) => project.id === sourceFacts[0]?.project.internalProjectId,
+      );
+      return {
+        projectReference: bullet.projectId,
+        projectName: sourceProject?.name ?? "虚构项目",
+        projectType: sourceProject?.projectType ?? null,
+        role: sourceProject?.role ?? null,
+        originalDescription: sourceProject?.fullDescription ?? "",
+        tailoredBullets: [bullet.text],
+        evidence: sourceFacts.map((fact) => ({
+          category: fact.project.category,
+          canonicalText: fact.text,
+          assertionStrength: fact.project.assertionStrength,
+        })),
+        patterns: [bullet.pattern],
+      };
+    }),
+  };
   return {
     facts,
     plan: validated.plan,

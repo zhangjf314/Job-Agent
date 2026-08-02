@@ -26,15 +26,18 @@ Personal Job Agent 是一个覆盖职业档案、简历、JD 分析、岗位管�
 - [AI Settings](docs/screenshots/09-ai-settings.png)
 - [Profile Photo Editor](docs/screenshots/11-profile-photo-editor.png)
 - [Smart One-Page Print](docs/screenshots/12-smart-one-page-print.png)
+- [Project Fact Editor](docs/screenshots/13-project-fact-editor.png)
+- [Tailored Project Description](docs/screenshots/14-tailored-project-description.png)
+- [Project Description Comparison](docs/screenshots/15-project-description-comparison.png)
 
 ## 核心功能
 
-- 职业档案：教育、技能、项目、经历和求职偏好
+- 职业档案：教育、技能、完整项目档案、可验证项目事实、经历和求职偏好
 - 档案证件照：本地上传、3:4 裁剪、WebP 规范化、替换和删除
 - 简历中心：通用简历、岗位定制简历、模板、Markdown 与打印/PDF
 - 智能一页打印：在可读性下限内自动适配；无法安全适配时保留标准分页
 - JD 分析：职责、技能、关键词、匹配项、缺口和风险
-- 定制简历：事实选择 Plan、确定性编译、Grounded Schema 与事实门禁
+- 定制简历：事实选择与项目改写 Plan、确定性项目描述编译、Grounded Schema 与事实门禁
 - 申请材料：自我介绍、投递邮件和招聘沟通话术
 - 职业策略：岗位方向、技能缺口、搜索策略和 30 天行动计划
 - 岗位库：手动、文件、公开 URL 与 Fixture 数据导入
@@ -45,10 +48,13 @@ Personal Job Agent 是一个覆盖职业档案、简历、JD 分析、岗位管�
 
 ```mermaid
 flowchart LR
-    Profile["Candidate Profile"] --> Registry["Candidate Fact Registry"]
+    Profile["Candidate Profile"] --> ProjectAtoms["Project Fact Atoms"]
+    Profile --> Registry["Candidate Fact Registry"]
+    ProjectAtoms --> Registry
     Registry --> Plan["LLM Selection Plan"]
     Plan --> Validation["Plan Schema + Validation"]
-    Validation --> Compiler["Deterministic Grounded Compiler"]
+    Validation --> ProjectCompiler["Deterministic Project Compiler"]
+    ProjectCompiler --> Compiler["Deterministic Grounded Compiler"]
     Compiler --> Schema["Grounded Schema"]
     Schema --> Gate["Factuality Gate"]
     Gate --> Resume["Tailored Resume"]

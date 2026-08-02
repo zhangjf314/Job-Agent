@@ -95,6 +95,7 @@ async function main() {
         );
       }
       await preparePage(page);
+      await page.evaluate(() => window.scrollTo(0, 0));
       const banner = page.locator("[data-portfolio-demo-banner]");
       if (!(await banner.isVisible())) {
         throw new Error(`Demo banner is not visible on ${screenshot.path}.`);
@@ -108,11 +109,13 @@ async function main() {
       }
       if ("click" in screenshot) {
         await page.locator(screenshot.click).click();
-        await page.waitForFunction(() => {
-          const shell = document.querySelector("[data-fit-status]");
-          const status = shell?.getAttribute("data-fit-status");
-          return status && status !== "idle" && status !== "measuring";
-        });
+        if (await page.locator("[data-fit-status]").count()) {
+          await page.waitForFunction(() => {
+            const shell = document.querySelector("[data-fit-status]");
+            const status = shell?.getAttribute("data-fit-status");
+            return status && status !== "idle" && status !== "measuring";
+          });
+        }
       }
       const scrolled = await page.evaluate(() => window.scrollY > 0);
       if (scrolled) {

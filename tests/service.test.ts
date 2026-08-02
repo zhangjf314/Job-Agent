@@ -95,6 +95,10 @@ class MockDb {
   };
 
   projectItem = {
+    count: async ({ where }: Row) => this.projects.filter(
+      (item) => item.profileId === where.profileId &&
+        String(item.name).toLocaleLowerCase("zh-CN") === String(where.name.equals).toLocaleLowerCase("zh-CN"),
+    ).length,
     create: async ({ data }: Row) => {
       const item = { id: this.next("project"), ...data };
       this.projects.push(item);

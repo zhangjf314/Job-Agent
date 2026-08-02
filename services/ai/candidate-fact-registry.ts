@@ -1,4 +1,10 @@
+import { createHash } from "node:crypto";
 import type { ResumeProfile } from "@/services/resume-generator";
+import { projectStableKey } from "@/services/project-facts/project-fact-atomizer";
+import type {
+  ProjectAssertionStrength,
+  ProjectFactCategory,
+} from "@/types/project-facts";
 import type { JDAnalysisResult } from "@/types/jd";
 import type {
   GROUNDED_SECTION_TYPES_BY_POSITION,
@@ -10,6 +16,7 @@ export type CandidateFactCategory =
   | "project"
   | "project_technology"
   | "project_responsibility"
+  | "project_atom"
   | "employment"
   | "internship"
   | "award"
@@ -21,6 +28,24 @@ export type CandidateFact = {
   category: CandidateFactCategory;
   text: string;
   canonicalTerms: string[];
+  project?: {
+    internalProjectId: string;
+    projectReference: string;
+    projectStableKey: string;
+    atomStableKey: string;
+    category: ProjectFactCategory;
+    assertionStrength: ProjectAssertionStrength;
+    projectType: string | null;
+    role: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    displayOrder: number;
+    renderable: boolean;
+  };
+};
+
+export type ProjectCandidateFact = CandidateFact & {
+  project: NonNullable<CandidateFact["project"]>;
 };
 
 export type GroundedSectionType =
@@ -48,12 +73,26 @@ const prefixes: Record<CandidateFactCategory, string> = {
   project: "PRJ",
   project_technology: "TEC",
   project_responsibility: "TSK",
+  project_atom: "PROJECT",
   employment: "EMP",
   internship: "INT",
   award: "AWD",
   metric: "MET",
   achievement: "ACH",
 };
+
+function stableReference(prefix: string, value: string) {
+  return `${prefix}_${createHash("sha256").update(value).digest("hex").slice(0, 12).toUpperCase()}`;
+}
+
+function dateValue(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+export function isProjectCandidateFact(fact: CandidateFact): fact is ProjectCandidateFact {
+  return fact.category === "project_atom" && Boolean(fact.project);
+}
 
 function clean(value: unknown) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
@@ -82,6 +121,7 @@ export function buildCandidateFactRegistry(
   baseResumeMarkdown = "",
 ): CandidateFact[] {
   const rows: Array<{ category: CandidateFactCategory; text: string }> = [];
+  const projectFacts: ProjectCandidateFact[] = [];
   const add = (category: CandidateFactCategory, value: unknown) => {
     const text = clean(value);
     if (text) rows.push({ category, text });
@@ -99,6 +139,38 @@ export function buildCandidateFactRegistry(
   }
   for (const project of profile.projectItems ?? []) {
     add("project", project.name);
+    const atoms = [...(project.factAtoms ?? [])].sort(
+      (a, b) => a.displayOrder - b.displayOrder || a.stableKey.localeCompare(b.stableKey),
+    );
+    if (atoms.length > 0) {
+      const stableKey = clean(project.stableKey) || projectStableKey(project.name);
+      const projectReference = stableReference("P_PROJECT", stableKey);
+      for (const atom of atoms) {
+        const text = clean(atom.canonicalText);
+        if (!text) continue;
+        projectFacts.push({
+          id: stableReference("F_PROJECT", `${stableKey}:${atom.stableKey}`),
+          category: "project_atom",
+          text,
+          canonicalTerms: canonicalTerms(text),
+          project: {
+            internalProjectId: project.id,
+            projectReference,
+            projectStableKey: stableKey,
+            atomStableKey: atom.stableKey,
+            category: atom.category,
+            assertionStrength: atom.assertionStrength,
+            projectType: clean(project.projectType) || null,
+            role: clean(project.role) || null,
+            startDate: dateValue(project.startDate),
+            endDate: dateValue(project.endDate),
+            displayOrder: atom.displayOrder,
+            renderable: atom.renderable,
+          },
+        });
+      }
+      continue;
+    }
     for (const technology of project.techStack ?? []) {
       add("project_technology", `${clean(project.name)}使用${clean(technology)}`);
     }
@@ -145,7 +217,7 @@ export function buildCandidateFactRegistry(
     a.category.localeCompare(b.category) || key(a.text).localeCompare(key(b.text), "zh-CN"),
   );
   const counters = new Map<CandidateFactCategory, number>();
-  return sorted.map((row) => {
+  const regularFacts = sorted.map((row) => {
     const index = (counters.get(row.category) ?? 0) + 1;
     counters.set(row.category, index);
     const terms = canonicalTerms(row.text);
@@ -157,6 +229,7 @@ export function buildCandidateFactRegistry(
       canonicalTerms: [...new Set([...terms, ...repeatedInBaseResume])].sort(),
     };
   });
+  return [...regularFacts, ...projectFacts];
 }
 
 export function buildJobRequirementFacts(
@@ -192,7 +265,84 @@ export function buildJobRequirementFacts(
 }
 
 export function formatFactRegistryForPrompt(facts: CandidateFact[]) {
-  return facts.map((fact) => `[${fact.id}] ${fact.text}`).join("\n");
+  return facts
+    .filter((fact) => !isProjectCandidateFact(fact))
+    .map((fact) => `[${fact.id}] ${fact.text}`)
+    .join("\n");
+}
+
+export const PROJECT_PROMPT_LIMITS = {
+  maxProjects: 6,
+  maxAtomsPerProject: 12,
+  maxAtomsTotal: 40,
+} as const;
+
+export type ProjectPromptSelection = {
+  facts: ProjectCandidateFact[];
+  projectCount: number;
+  omittedProjectCount: number;
+  omittedAtomCount: number;
+};
+
+export function selectProjectFactsForPrompt(
+  facts: CandidateFact[],
+): ProjectPromptSelection {
+  const grouped = new Map<string, ProjectCandidateFact[]>();
+  for (const fact of facts) {
+    if (!isProjectCandidateFact(fact) || !fact.project.renderable) continue;
+    const group = grouped.get(fact.project.projectReference) ?? [];
+    group.push(fact);
+    grouped.set(fact.project.projectReference, group);
+  }
+  const projects = [...grouped.values()];
+  const selected: ProjectCandidateFact[] = [];
+  let omittedAtomCount = 0;
+  for (const projectFacts of projects.slice(0, PROJECT_PROMPT_LIMITS.maxProjects)) {
+    const ordered = [...projectFacts].sort(
+      (a, b) =>
+        a.project.displayOrder - b.project.displayOrder || a.id.localeCompare(b.id),
+    );
+    const remaining = PROJECT_PROMPT_LIMITS.maxAtomsTotal - selected.length;
+    const count = Math.max(0, Math.min(PROJECT_PROMPT_LIMITS.maxAtomsPerProject, remaining));
+    selected.push(...ordered.slice(0, count));
+    omittedAtomCount += ordered.length - count;
+  }
+  for (const projectFacts of projects.slice(PROJECT_PROMPT_LIMITS.maxProjects)) {
+    omittedAtomCount += projectFacts.length;
+  }
+  return {
+    facts: selected,
+    projectCount: new Set(selected.map((fact) => fact.project.projectReference)).size,
+    omittedProjectCount: Math.max(0, projects.length - PROJECT_PROMPT_LIMITS.maxProjects),
+    omittedAtomCount,
+  };
+}
+
+export function formatProjectFactsForPrompt(facts: ProjectCandidateFact[]) {
+  const grouped = new Map<string, ProjectCandidateFact[]>();
+  for (const fact of facts) {
+    const group = grouped.get(fact.project.projectReference) ?? [];
+    group.push(fact);
+    grouped.set(fact.project.projectReference, group);
+  }
+  return [...grouped.values()]
+    .map((projectFacts) => {
+      const project = projectFacts[0].project;
+      const header = [
+        `[${project.projectReference}]`,
+        `type=${project.projectType ?? "未填写"}`,
+        `role=${project.role ?? "未填写"}`,
+        `dates=${project.startDate ?? "未填写"}..${project.endDate ?? "至今"}`,
+      ].join(" ");
+      const lines = [...projectFacts]
+        .sort((a, b) => a.project.displayOrder - b.project.displayOrder || a.id.localeCompare(b.id))
+        .map(
+          (fact) =>
+            `[${fact.id}] category=${fact.project.category} strength=${fact.project.assertionStrength} fact=${fact.text}`,
+        );
+      return [header, ...lines].join("\n");
+    })
+    .join("\n\n");
 }
 
 export function formatJobRequirementsForPrompt(facts: JobRequirementFact[]) {
@@ -208,6 +358,7 @@ const sectionEligibilityByCategory: Record<
   project: ["summary", "projects"],
   project_technology: ["summary", "skills", "projects"],
   project_responsibility: ["summary", "projects"],
+  project_atom: ["projects"],
   employment: ["summary", "experiences"],
   internship: ["summary", "experiences"],
   award: ["summary", "others"],
@@ -215,7 +366,9 @@ const sectionEligibilityByCategory: Record<
   achievement: ["summary", "projects", "experiences", "others"],
 };
 
-function renderGroup(category: CandidateFactCategory) {
+function renderGroup(fact: CandidateFact) {
+  if (isProjectCandidateFact(fact)) return `project:${fact.project.projectReference}`;
+  const category = fact.category;
   if (category === "skill" || category === "project_technology") {
     return "skills";
   }
@@ -248,8 +401,9 @@ export function buildCandidateFactRenderDescriptors(
       shortLabel: fact.category,
       safePhrase,
       sectionEligibility: [...sectionEligibilityByCategory[fact.category]],
-      renderGroup: renderGroup(fact.category),
+      renderGroup: renderGroup(fact),
       renderable:
+        (!isProjectCandidateFact(fact) || fact.project.renderable) &&
         safePhrase.length > 0 &&
         safePhrase.length <= 80 &&
         !/[\r\n]/.test(safePhrase),

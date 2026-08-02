@@ -35,6 +35,7 @@
     "portfolio:dev": "tsx scripts/portfolio-db.ts dev",
     "portfolio:screenshots": "tsx scripts/portfolio-screenshots.ts",
     "portfolio:screenshot:audit": "tsx scripts/portfolio-screenshot-audit.ts",
+    "project-facts:backfill": "tsx scripts/backfill-project-fact-atoms.ts",
     "seed": "node prisma/seed.js",
     "setup": "node scripts/setup-local-postgres.js",
     "setup:db": "npm run prisma:migrate && npm run seed",

@@ -4,6 +4,7 @@ import { generateGeneralResumeAction } from "@/app/resume/actions";
 import { generateCareerStrategyAction } from "@/app/strategy/actions";
 import { CareerProfileForm } from "@/components/career-profile-form";
 import { ProfilePhotoEditor } from "@/components/profile-photo-editor";
+import { ProjectFactAtomEditor } from "@/components/project-fact-atom-editor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCareerProfileById } from "@/services/career-profile-service";
@@ -59,6 +60,7 @@ export default async function ProfileDetailPage({ params }: Props) {
           />
         </CardContent>
       </Card>
+      <ProjectFactAtomEditor profileId={profile.id} projects={profile.projectItems} />
       <CareerProfileForm
         mode="edit"
         defaultValues={toCareerProfileFormValues(profile)}

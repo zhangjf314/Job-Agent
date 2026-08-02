@@ -46,4 +46,18 @@ export type TailoredResumeResult = {
     applicationEmail: string;
     recruiterMessage: string;
   };
+  projectComparison?: Array<{
+    projectReference: string;
+    projectName: string;
+    projectType: string | null;
+    role: string | null;
+    originalDescription: string;
+    tailoredBullets: string[];
+    evidence: Array<{
+      category: string;
+      canonicalText: string;
+      assertionStrength: string;
+    }>;
+    patterns: string[];
+  }>;
 };

@@ -397,23 +397,73 @@ model SkillItem {
 }
 
 model ProjectItem {
-  id               String        @id @default(cuid())
-  profileId        String
-  profile          CareerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  name             String
-  role             String?
-  startDate        DateTime?
-  endDate          DateTime?
-  background       String?
-  goal             String?
-  responsibilities String[]
-  techStack        String[]
-  highlights       String[]
-  results          String?
-  metrics          String[]
-  links            String[]
+  id                   String            @id @default(cuid())
+  profileId            String
+  profile              CareerProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  stableKey            String
+  name                 String
+  projectType          String?
+  role                 String?
+  startDate            DateTime?
+  endDate              DateTime?
+  background           String?
+  goal                 String?
+  fullDescription      String?
+  responsibilities     String[]
+  techStack            String[]
+  highlights           String[]
+  challenges           String[]
+  solutions            String[]
+  engineeringPractices String[]
+  results              String?
+  metrics              String[]
+  links                String[]
+  factAtoms             ProjectFactAtom[]
 
   @@index([profileId])
+  @@unique([profileId, stableKey])
+}
+
+enum ProjectFactCategory {
+  background
+  goal
+  role
+  technology
+  feature
+  responsibility
+  challenge
+  solution
+  engineering
+  result
+  metric
+}
+
+enum ProjectAssertionStrength {
+  learned
+  used
+  implemented
+  designed
+  led
+  achieved
+}
+
+model ProjectFactAtom {
+  id                String                   @id @default(cuid())
+  projectId         String
+  stableKey         String
+  category          ProjectFactCategory
+  canonicalText     String
+  sourceField       String?
+  sourceOrder       Int?
+  displayOrder      Int
+  assertionStrength ProjectAssertionStrength
+  renderable        Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  project           ProjectItem              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, stableKey])
+  @@index([projectId, displayOrder])
 }
 
 model ExperienceItem {
