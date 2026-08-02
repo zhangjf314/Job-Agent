@@ -11,6 +11,10 @@ import {
 } from "./portfolio-fixtures";
 import { assertPortfolioDatabaseUrl } from "./portfolio-env";
 import { processProfilePhoto } from "../services/profile-photo-service";
+import {
+  atomizeProject,
+  projectStableKey,
+} from "../services/project-facts/project-fact-atomizer";
 
 const prisma = new PrismaClient();
 const portfolioDemoTimestamp = new Date(PORTFOLIO_DEMO_TIMESTAMP);
@@ -111,18 +115,38 @@ async function seed() {
             })),
           },
           projectItems: {
-            create: portfolioProfileFixture.projectItems.map((project) => ({
-              name: project.name,
-              role: project.role,
-              background: project.background,
-              goal: project.goal,
-              responsibilities: project.responsibilities,
-              techStack: project.techStack,
-              highlights: project.highlights,
-              results: project.results,
-              metrics: project.metrics,
-              links: project.links,
-            })),
+            create: portfolioProfileFixture.projectItems.map((project, index) => {
+              const id = `portfolio-demo-project-${index + 1}`;
+              const stableKey = projectStableKey(project.name);
+              const value = {
+                id,
+                stableKey,
+                name: project.name,
+                projectType: project.projectType,
+                role: project.role,
+                background: project.background,
+                goal: project.goal,
+                fullDescription: project.fullDescription,
+                responsibilities: project.responsibilities,
+                techStack: project.techStack,
+                highlights: project.highlights,
+                challenges: project.challenges,
+                solutions: project.solutions,
+                engineeringPractices: project.engineeringPractices,
+                results: project.results,
+                metrics: project.metrics,
+                links: project.links,
+              };
+              return {
+                ...value,
+                factAtoms: {
+                  create: atomizeProject(value).map(({ projectId, ...atom }) => {
+                    void projectId;
+                    return atom;
+                  }),
+                },
+              };
+            }),
           },
         },
       },
@@ -236,6 +260,7 @@ async function seed() {
       contentJson: json({
         ...markerMetadata,
         applicationMaterials: compiled.publicResult.applicationMaterials,
+        projectComparison: compiled.publicResult.projectComparison,
         compilerDiagnostics: compiled.compilerDiagnostics,
       }),
       sourceProfileSnapshot: json({ ...markerMetadata }),
@@ -485,6 +510,9 @@ async function seed() {
         planJsonStatus: "passed",
         planSchemaStatus: "passed",
         planValidationStatus: "passed",
+        projectPlanStatus: "passed",
+        projectPlanValidationStatus: "passed",
+        projectCompilationStatus: "passed",
         compilerStatus: "passed",
         schemaStatus: "passed",
         factualityStatus: "pass",
@@ -494,6 +522,18 @@ async function seed() {
         sectionLineCounts: compiled.compilerDiagnostics.sectionLineCounts,
         maximumLineLength: compiled.compilerDiagnostics.maximumLineLength,
         maximumSourceFactIds: compiled.compilerDiagnostics.maximumSourceFactIds,
+        projectCountAvailable: portfolioProfileFixture.projectItems.length,
+        projectCountSelected: compiled.compilerDiagnostics.projectRewriteCount,
+        projectRewritePlanCount: compiled.compilerDiagnostics.projectRewriteCount,
+        projectBulletPlanCount: compiled.compilerDiagnostics.projectBulletCount,
+        projectAtomCountAvailable: compiled.facts.filter((fact) => fact.category === "project_atom").length,
+        projectAtomCountSelected: compiled.compilerDiagnostics.projectAtomSelectionCount,
+        projectAtomCountRendered: compiled.compilerDiagnostics.projectRenderedAtomCount,
+        projectAtomCountOmitted: compiled.facts.filter((fact) => fact.category === "project_atom").length - compiled.compilerDiagnostics.projectRenderedAtomCount,
+        projectBulletCount: compiled.compilerDiagnostics.projectBulletCount,
+        maximumProjectBulletLength: compiled.compilerDiagnostics.projectMaximumLineLength,
+        maximumProjectBulletFactCount: compiled.compilerDiagnostics.projectMaximumBulletFactCount,
+        projectFactualityViolationCount: 0,
         factualityViolationCount: 0,
       },
     },

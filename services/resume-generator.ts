@@ -5,9 +5,32 @@ import type { GeneratedResumeSection, ResumeGenerationResult } from "@/types/res
 import { buildMarkdownFromSections, linesToMarkdownList } from "./resume-markdown";
 import { calculateResumeQualityScore } from "./resume-quality";
 
-export type ResumeProfile = Prisma.CareerProfileGetPayload<{
+type PersistedResumeProfile = Prisma.CareerProfileGetPayload<{
   include: typeof careerProfileInclude;
 }>;
+
+export type ResumeProfile = Omit<PersistedResumeProfile, "projectItems"> & {
+  projectItems: Array<
+    Omit<
+      PersistedResumeProfile["projectItems"][number],
+      | "factAtoms"
+      | "stableKey"
+      | "projectType"
+      | "fullDescription"
+      | "challenges"
+      | "solutions"
+      | "engineeringPractices"
+    > & {
+      stableKey?: string;
+      projectType?: string | null;
+      fullDescription?: string | null;
+      challenges?: string[];
+      solutions?: string[];
+      engineeringPractices?: string[];
+      factAtoms?: PersistedResumeProfile["projectItems"][number]["factAtoms"];
+    }
+  >;
+};
 
 function formatDate(value?: Date | string | null) {
   if (!value) return "至今";

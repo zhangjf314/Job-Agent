@@ -56,15 +56,21 @@ export const skillItemSchema = z.object({
 });
 
 export const projectItemSchema = z.object({
+  id: z.string().trim().min(1).optional(),
   name: requiredText("项目名称"),
+  projectType: z.string().trim().max(80).optional(),
   role: z.string().trim().optional().default(""),
   startDate: z.coerce.date().optional().nullable(),
   endDate: z.coerce.date().optional().nullable(),
   background: z.string().trim().optional().default(""),
   goal: z.string().trim().optional().default(""),
+  fullDescription: z.string().trim().max(4000).optional(),
   responsibilities: stringList,
   techStack: stringList,
   highlights: stringList,
+  challenges: z.array(z.string().trim().min(1)).optional(),
+  solutions: z.array(z.string().trim().min(1)).optional(),
+  engineeringPractices: z.array(z.string().trim().min(1)).optional(),
   results: z.string().trim().optional().default(""),
   metrics: stringList,
   links: z.array(z.string().trim().url()).default([]),

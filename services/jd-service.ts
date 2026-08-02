@@ -219,7 +219,12 @@ export async function generateTailoredResume(
       status: "draft",
       templateKey: resolveResumeTemplateKey(baseResume.templateKey),
       contentMarkdown: tailored.contentMarkdown,
-      contentJson: { sections: tailored.sections, jdAnalysisId: analysis.id, applicationMaterials: tailored.applicationMaterials },
+      contentJson: {
+        sections: tailored.sections,
+        jdAnalysisId: analysis.id,
+        applicationMaterials: tailored.applicationMaterials,
+        projectComparison: tailored.projectComparison ?? [],
+      },
       sourceProfileSnapshot: snapshot(profile),
       sourceProfileVersion: profile.updatedAt?.toISOString?.() ?? "",
       completenessScore: profile.profileCompletenessScore,

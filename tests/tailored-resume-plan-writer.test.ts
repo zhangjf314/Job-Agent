@@ -44,6 +44,7 @@ function validPlan(): TailoredResumePlan {
     },
     changedSections: ["skills", "projects"],
     priorityFactIds: [skill, project, education],
+    projectRewrites: [],
   };
 }
 
@@ -124,11 +125,19 @@ describe("plan-based tailored resume writer", () => {
     expect(fake.structuredCompletion.mock.calls[0][0].schemaName).toBe(
       "tailored_resume_selection_plan",
     );
+    expect(fake.structuredCompletion.mock.calls[0][0]).toMatchObject({
+      allowTransportRetry: false,
+      allowJsonRepair: false,
+      allowFinalizationRetry: false,
+    });
     expect(output.result.sections).toHaveLength(6);
     expect(output.diagnostics).toMatchObject({
       planJsonStatus: "passed",
       planSchemaStatus: "passed",
       planValidationStatus: "passed",
+      projectPlanStatus: "passed",
+      projectPlanValidationStatus: "passed",
+      projectCompilationStatus: "passed",
       compilerStatus: "passed",
       factualityStatus: "pass",
       factualityRepairCount: 0,

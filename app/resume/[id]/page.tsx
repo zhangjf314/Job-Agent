@@ -14,6 +14,7 @@ import { getTailoredResumeByResumeId } from "@/services/jd-service";
 import { getResumeById } from "@/services/resume-service";
 import { getApplicationMaterials } from "@/services/resume-application-materials";
 import { renderResumeMarkdown, type RenderedResumeMarkdown } from "@/services/resume-templates/renderer";
+import type { TailoredResumeResult } from "@/types/jd";
 import {
   archiveResumeAction,
   deleteResumeAction,
@@ -28,6 +29,12 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+function projectComparison(value: unknown) {
+  if (!value || typeof value !== "object") return [];
+  const comparison = (value as Partial<TailoredResumeResult>).projectComparison;
+  return Array.isArray(comparison) ? comparison : [];
+}
+
 export default async function ResumeDetailPage({ params }: Props) {
   const { id } = await params;
   const resume = await getResumeById(id);
@@ -35,6 +42,7 @@ export default async function ResumeDetailPage({ params }: Props) {
   const tailored = await getTailoredResumeByResumeId(id);
   const applications = await listApplicationsByResumeId(id);
   const applicationMaterials = getApplicationMaterials(resume.contentJson);
+  const projectComparisons = projectComparison(resume.contentJson);
   let rendered: RenderedResumeMarkdown | null = null;
   let renderError = "";
   try {
@@ -146,6 +154,42 @@ export default async function ResumeDetailPage({ params }: Props) {
         </aside>
 
         <div className="space-y-6">
+          {projectComparisons.length > 0 ? (
+            <Card data-portfolio-project-comparison>
+              <CardHeader><CardTitle>完整项目描述与岗位定制描述</CardTitle></CardHeader>
+              <CardContent className="space-y-6 text-sm">
+                {projectComparisons.map((comparison, comparisonIndex) => (
+                  <section key={comparison.projectReference} className="space-y-3 rounded-md border p-4">
+                    <div className="font-medium">
+                      {comparison.projectName}
+                      {comparison.projectType ? ` · ${comparison.projectType}` : ""}
+                      {comparison.role ? ` · ${comparison.role}` : ""}
+                    </div>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div>
+                        <div className="mb-2 text-xs font-medium text-muted-foreground">职业档案完整描述</div>
+                        <p className="whitespace-pre-wrap rounded-md bg-muted p-3">{comparison.originalDescription || "未填写完整描述"}</p>
+                      </div>
+                      <div data-portfolio-tailored-project-description={comparisonIndex}>
+                        <div className="mb-2 text-xs font-medium text-muted-foreground">岗位定制项目描述</div>
+                        <ul className="space-y-2 rounded-md bg-muted p-3">
+                          {comparison.tailoredBullets.map((bullet) => <li key={bullet}>- {bullet}</li>)}
+                        </ul>
+                      </div>
+                    </div>
+                    <details data-portfolio-project-evidence={comparisonIndex}>
+                      <summary className="cursor-pointer text-xs font-medium text-muted-foreground">查看事实依据摘要</summary>
+                      <div className="mt-2 space-y-1">
+                        {comparison.evidence.map((fact, index) => (
+                          <div key={`${fact.category}-${index}`}>{fact.category} · {fact.assertionStrength}：{fact.canonicalText}</div>
+                        ))}
+                      </div>
+                    </details>
+                  </section>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
           {applicationMaterials ? (
             <Card data-portfolio-application-materials>
               <CardHeader><CardTitle>岗位投递材料</CardTitle></CardHeader>

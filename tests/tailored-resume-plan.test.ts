@@ -41,6 +41,7 @@ function plan(overrides: Partial<TailoredResumePlan> = {}): TailoredResumePlan {
     },
     changedSections: ["summary", "skills"],
     priorityFactIds: [first, second],
+    projectRewrites: [],
     ...overrides,
   };
 }

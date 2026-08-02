@@ -54,6 +54,7 @@ function plan(): TailoredResumePlan {
     },
     changedSections: ["projects", "skills"],
     priorityFactIds: selected.slice(0, 20),
+    projectRewrites: [],
   };
 }
 

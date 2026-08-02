@@ -7,7 +7,9 @@ import type {
   CandidateFact,
   CandidateFactRenderDescriptor,
   GroundedSectionType,
+  ProjectCandidateFact,
 } from "./candidate-fact-registry";
+import { isProjectCandidateFact } from "./candidate-fact-registry";
 import {
   groundedTailoredResumeSchema,
   type GroundedTailoredResume,
@@ -22,6 +24,10 @@ import { planSelectionArrays } from "./tailored-resume-plan-validator";
 import {
   renderTailoredResumeApplicationMaterials,
 } from "./tailored-resume-application-material-renderer";
+import {
+  compileProjectDescriptions,
+  type CompiledProjectBullet,
+} from "./project-description-compiler";
 
 export type GroundedCompilerDiagnostics = {
   selectedFactCount: number;
@@ -33,6 +39,12 @@ export type GroundedCompilerDiagnostics = {
   maximumLineLength: number;
   maximumSourceFactIds: number;
   applicationMaterialLineCounts: number[];
+  projectRewriteCount: number;
+  projectBulletCount: number;
+  projectAtomSelectionCount: number;
+  projectMaximumLineLength: number;
+  projectRenderedAtomCount: number;
+  projectMaximumBulletFactCount: number;
 };
 
 export class DeterministicGroundedCompilerError extends Error {
@@ -156,6 +168,7 @@ export function compileGroundedTailoredResume(input: {
   grounded: GroundedTailoredResume;
   diagnostics: GroundedCompilerDiagnostics;
   normalizationSummary: GroundedNormalizationSummary;
+  compiledProjectBullets: CompiledProjectBullet[];
 } {
   void input.jdAnalysis;
   const descriptorById = new Map(
@@ -171,6 +184,12 @@ export function compileGroundedTailoredResume(input: {
     input.factRegistry.map((fact, index) => [fact.id, index]),
   );
   const sectionFactSelectionCounts: number[] = [];
+  const projectFacts = input.factRegistry.filter(isProjectCandidateFact) as ProjectCandidateFact[];
+  const compiledProjectBullets = compileProjectDescriptions({
+    rewritePlans: input.plan.projectRewrites,
+    projectFacts,
+    characterLimit: 80,
+  });
 
   const sections = GROUNDED_SECTION_TYPES_BY_POSITION.map(
     (sectionType, order) => {
@@ -183,7 +202,9 @@ export function compileGroundedTailoredResume(input: {
         descriptor.sectionEligibility.includes(sectionType),
       );
       sectionFactSelectionCounts.push(eligible.length);
-      const lines = renderFactGroups(eligible);
+      const lines = sectionType === "projects" && input.plan.projectRewrites.length > 0
+        ? compiledProjectBullets.map(({ text, sourceFactIds, kind }) => ({ text, sourceFactIds, kind }))
+        : renderFactGroups(eligible);
       return {
         type: sectionType,
         title: titles[sectionType],
@@ -199,7 +220,10 @@ export function compileGroundedTailoredResume(input: {
       input.renderDescriptors,
     );
   const missingFields = deterministicMissingFields(input.factRegistry);
-  const selectedIds = new Set(planSelectionArrays(input.plan).flat());
+  const projectSelectedIds = input.plan.projectRewrites.flatMap((rewrite) =>
+    rewrite.bullets.flatMap((bullet) => bullet.factIds),
+  );
+  const selectedIds = new Set([...planSelectionArrays(input.plan).flat(), ...projectSelectedIds]);
   const unrenderableFactCount = [...selectedIds].filter(
     (id) => !descriptorById.get(id)?.renderable,
   ).length;
@@ -253,11 +277,18 @@ export function compileGroundedTailoredResume(input: {
         applicationMaterials.applicationEmail.length,
         applicationMaterials.recruiterMessage.length,
       ],
+      projectRewriteCount: input.plan.projectRewrites.length,
+      projectBulletCount: compiledProjectBullets.length,
+      projectAtomSelectionCount: new Set(projectSelectedIds).size,
+      projectMaximumLineLength: Math.max(0, ...compiledProjectBullets.map((bullet) => bullet.text.length)),
+      projectRenderedAtomCount: new Set(compiledProjectBullets.flatMap((bullet) => bullet.sourceFactIds)).size,
+      projectMaximumBulletFactCount: Math.max(0, ...compiledProjectBullets.map((bullet) => bullet.sourceFactIds.length)),
     };
     return {
       grounded,
       diagnostics,
       normalizationSummary: normalized.summary,
+      compiledProjectBullets,
     };
   } catch {
     throw new DeterministicGroundedCompilerError(

@@ -90,15 +90,21 @@ function normalize(values: CareerProfileFormValues): CareerProfileInput {
       yearsOfExperience: nullableNumber(item.yearsOfExperience),
     })),
     projectItems: values.projectItems.map((item) => ({
+      id: item.id ? String(item.id) : undefined,
       name: String(item.name ?? ""),
+      projectType: String(item.projectType ?? ""),
       role: String(item.role ?? ""),
       startDate: item.startDate ? new Date(String(item.startDate)) : null,
       endDate: item.endDate ? new Date(String(item.endDate)) : null,
       background: String(item.background ?? ""),
       goal: String(item.goal ?? ""),
+      fullDescription: String(item.fullDescription ?? ""),
       responsibilities: splitText(item.responsibilitiesText),
       techStack: splitText(item.techStackText),
       highlights: splitText(item.highlightsText),
+      challenges: splitText(item.challengesText),
+      solutions: splitText(item.solutionsText),
+      engineeringPractices: splitText(item.engineeringPracticesText),
       results: String(item.results ?? ""),
       metrics: splitText(item.metricsText),
       links: splitText(item.linksText),
@@ -280,18 +286,24 @@ export function CareerProfileForm({ mode, defaultValues, onSubmit }: Props) {
         ))}
       </Module>
 
-      <Module title="项目经历" onAdd={() => projects.append({ name: "", role: "", startDate: "", endDate: "", background: "", goal: "", responsibilitiesText: "", techStackText: "", highlightsText: "", results: "", metricsText: "", linksText: "" })}>
+      <Module title="项目经历" onAdd={() => projects.append({ name: "", projectType: "", role: "", startDate: "", endDate: "", background: "", goal: "", fullDescription: "", responsibilitiesText: "", techStackText: "", highlightsText: "", challengesText: "", solutionsText: "", engineeringPracticesText: "", results: "", metricsText: "", linksText: "" })}>
         {projects.fields.map((field, index) => (
           <div key={field.id} className="grid gap-3 border-t pt-4 md:grid-cols-2">
+            <input type="hidden" {...register(`projectItems.${index}.id`)} />
             <Input placeholder="项目名称" {...register(`projectItems.${index}.name`)} />
+            <Input placeholder="项目类型，例如：课程项目" {...register(`projectItems.${index}.projectType`)} />
             <Input placeholder="角色" {...register(`projectItems.${index}.role`)} />
             <Input type="date" {...register(`projectItems.${index}.startDate`)} />
             <Input type="date" {...register(`projectItems.${index}.endDate`)} />
             <Textarea placeholder="背景" {...register(`projectItems.${index}.background`)} />
             <Textarea placeholder="目标" {...register(`projectItems.${index}.goal`)} />
+            <Textarea className="md:col-span-2" placeholder="完整项目描述（原文会保留，不会被定制简历覆盖）" {...register(`projectItems.${index}.fullDescription`)} />
             <Input placeholder="职责，逗号分隔" {...register(`projectItems.${index}.responsibilitiesText`)} />
             <Input placeholder="技术栈，逗号分隔" {...register(`projectItems.${index}.techStackText`)} />
             <Input placeholder="亮点，逗号分隔" {...register(`projectItems.${index}.highlightsText`)} />
+            <Input placeholder="技术难点，逗号或换行分隔" {...register(`projectItems.${index}.challengesText`)} />
+            <Input placeholder="解决方案，逗号或换行分隔" {...register(`projectItems.${index}.solutionsText`)} />
+            <Input placeholder="工程实践，逗号或换行分隔" {...register(`projectItems.${index}.engineeringPracticesText`)} />
             <Input placeholder="指标，逗号分隔" {...register(`projectItems.${index}.metricsText`)} />
             <Input placeholder="链接，逗号分隔" {...register(`projectItems.${index}.linksText`)} />
             <Textarea placeholder="结果" {...register(`projectItems.${index}.results`)} />
