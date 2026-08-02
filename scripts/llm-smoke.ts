@@ -31,7 +31,7 @@ import {
   fictionalSmokeBaseResume,
   fictionalSmokeJD,
   fictionalSmokeJob,
-  fictionalSmokeProfile,
+  fictionalProjectRewriteSmokeProfile,
 } from "./llm-smoke-fixtures";
 import {
   parseSmokeArguments,
@@ -106,6 +106,9 @@ async function main() {
     sectionCount?: number;
     additionalRepairBlockedByRequestLimit?: boolean;
     httpStatus?: number;
+    projectFullDescriptionRetained?: boolean;
+    projectComparisonCount?: number;
+    projectEvidenceSubsetVerified?: boolean;
   };
   const summaries: SmokeSummary[] = [];
 
@@ -209,11 +212,16 @@ async function main() {
           new MockTailoredResumeWriterProvider(),
           false,
         ).write({
-          profile: fictionalSmokeProfile,
+          profile: fictionalProjectRewriteSmokeProfile,
           baseResumeMarkdown: fictionalSmokeBaseResume,
           jdAnalysis: jd,
           requestPolicy: smokeRequestPolicy(explicitMaxExternalRequests),
         });
+        const comparison = output.result.projectComparison ?? [];
+        const sourceProjectFacts = new Set(
+          fictionalProjectRewriteSmokeProfile.projectItems.flatMap((project) =>
+            (project.factAtoms ?? []).map((atom) => atom.canonicalText)),
+        );
         summaries.push({
           name: "Tailored resume",
           success: output.diagnostics.factualityStatus === "pass",
@@ -224,6 +232,12 @@ async function main() {
           factualityViolationCategories: output.diagnostics.factualityViolationCategories,
           responseSafetySummary: output.diagnostics.responseSafetySummary,
           sectionCount: output.result.sections.length,
+          projectFullDescriptionRetained:
+            fictionalProjectRewriteSmokeProfile.projectItems.every((project) =>
+              Boolean(project.fullDescription?.trim())),
+          projectComparisonCount: comparison.length,
+          projectEvidenceSubsetVerified: comparison.length > 0 && comparison.every((item) =>
+            item.evidence.every((fact) => sourceProjectFacts.has(fact.canonicalText))),
         });
       } catch (error) {
         const factualityDiagnostics =
@@ -345,6 +359,11 @@ async function main() {
       planJsonStatus: pipelineStages?.planJsonStatus,
       planSchemaStatus: pipelineStages?.planSchemaStatus,
       planValidationStatus: pipelineStages?.planValidationStatus,
+      projectPlanStatus: summary.diagnostics?.projectPlanStatus,
+      projectPlanValidationStatus:
+        summary.diagnostics?.projectPlanValidationStatus,
+      projectCompilationStatus:
+        summary.diagnostics?.projectCompilationStatus,
       compilerStatus: pipelineStages?.compilerStatus,
       jsonStatus: pipelineStages?.jsonStatus,
       jsonParse: pipelineStages?.jsonStatus ??
@@ -383,6 +402,36 @@ async function main() {
         summary.diagnostics?.compilerMaximumSourceFactIds,
       applicationMaterialLineCounts:
         summary.diagnostics?.applicationMaterialLineCounts,
+      projectCountAvailable: summary.diagnostics?.projectCountAvailable,
+      projectCountSelected: summary.diagnostics?.projectCountSelected,
+      projectRewritePlanCount: summary.diagnostics?.projectRewritePlanCount,
+      projectBulletPlanCount: summary.diagnostics?.projectBulletPlanCount,
+      projectAtomCountAvailable: summary.diagnostics?.projectAtomCountAvailable,
+      projectAtomCountSelected: summary.diagnostics?.projectAtomCountSelected,
+      projectAtomCountRendered: summary.diagnostics?.projectAtomCountRendered,
+      projectAtomCountOmitted: summary.diagnostics?.projectAtomCountOmitted,
+      projectBulletCount: summary.diagnostics?.projectBulletCount,
+      maximumProjectBulletLength:
+        summary.diagnostics?.maximumProjectBulletLength,
+      maximumProjectBulletFactCount:
+        summary.diagnostics?.maximumProjectBulletFactCount,
+      projectFactualityViolationCount:
+        summary.diagnostics?.projectFactualityViolationCount,
+      unknownProjectCount:
+        summary.diagnostics?.projectPlanValidationStatus === "passed" ? 0 : undefined,
+      unknownProjectAtomCount:
+        summary.diagnostics?.projectPlanValidationStatus === "passed" ? 0 : undefined,
+      crossProjectAtomCount:
+        summary.diagnostics?.projectPlanValidationStatus === "passed" ? 0 : undefined,
+      jdRequirementProjectAtomCount:
+        summary.diagnostics?.projectPlanValidationStatus === "passed" ? 0 : undefined,
+      duplicateProjectAtomCount:
+        summary.diagnostics?.projectPlanValidationStatus === "passed" ? 0 : undefined,
+      unrenderableProjectAtomCount:
+        summary.diagnostics?.projectPlanValidationStatus === "passed" ? 0 : undefined,
+      projectFullDescriptionRetained: summary.projectFullDescriptionRetained,
+      projectComparisonCount: summary.projectComparisonCount,
+      projectEvidenceSubsetVerified: summary.projectEvidenceSubsetVerified,
       applicationMaterialsIssues:
         summary.diagnostics?.compilerStatus === "passed" ? 0 : undefined,
       factualityRepairCount: summary.diagnostics?.factualityRepairCount,

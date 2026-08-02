@@ -121,6 +121,7 @@ export function buildTailoredResumePlanMessages(
         "Do not write resume text, emails, messages, titles, lines, claims, or explanations.",
         "Prefer a small relevant set over exhaustive selection.",
         "For projectRewrites, select only a fixed pattern and same-project project atom IDs. Never write a project bullet.",
+        "When relevant renderable project atoms are supplied, include at least one projectRewrites entry and one valid bullet.",
         "Select only candidate project fact IDs.",
         "Do not write resume bullets.",
         "Do not paraphrase project facts.",
